@@ -1,0 +1,10 @@
+[aws_servers]
+# demo_A_backup ansible_host=13.124.53.69
+western ansible_host=54.193.60.59
+
+[aws_servers:vars]
+#ansible_user=ubuntu
+#ansible_ssh_private_key_file=~/seoul_region.pem
+
+ansible_user=ubuntu
+ansible_ssh_private_key_file=~/.ssh/western.pem

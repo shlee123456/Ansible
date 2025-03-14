@@ -1,0 +1,27 @@
+---
+# Jenkins 사용자 설정에 대한 기본값
+
+# 사용자 및 그룹 기본 정보
+jenkins_user: jenkins
+jenkins_group: jenkins
+jenkins_uid: 900
+jenkins_gid: 900
+jenkins_shell: /bin/bash
+jenkins_home: /home/jenkins
+jenkins_comment: "Jenkins Deployment User"
+
+# 권한 설정
+jenkins_sudo_access: true
+jenkins_sudo_passwordless: true
+
+# SSH 설정
+jenkins_create_ssh_dir: true
+jenkins_ssh_dir_mode: "0700"
+jenkins_authorized_keys_mode: "0600"
+
+# Docker 설정
+jenkins_add_to_docker: true
+
+# SSH 클라이언트 설정
+jenkins_configure_ssh_client: true
+jenkins_disable_host_key_checking: true

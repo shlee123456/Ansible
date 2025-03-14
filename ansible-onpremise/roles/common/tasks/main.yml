@@ -1,0 +1,15 @@
+---
+- name: Update apt cache
+  raw: apt-get update
+
+# 시스템 기본 패키지 설치      
+- name: Install basic packages
+  raw: apt-get install -y vim git curl htop tree net-tools unzip wget python3-pip
+
+# timezone
+- name: Set timezone
+  raw: timedatectl set-timezone Asia/Seoul
+
+# Ansible 모듈에 사용될 Python 패키지 설치
+- name: Install Python dependencies for Ansible
+  raw: apt-get install -y python3-six python3-jmespath python3-yaml python3-setuptools

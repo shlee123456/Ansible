@@ -1,0 +1,10 @@
+---
+- name: Configure AWS Server
+  hosts: aws_servers
+  become: yes  # sudo 권한 사용
+
+  roles:
+    - common    # 기본 시스템 설정
+    # - ssh-keys  # ssh 키생성 설정
+    - docker
+      # - app     # 추후 필요한 역할 추가

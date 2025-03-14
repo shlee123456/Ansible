@@ -1,0 +1,24 @@
+# jenkins-user/meta/main.yml
+---
+galaxy_info:
+  role_name: jenkins_user
+  author: Your Name
+  description: Role to create and configure jenkins user for CI/CD deployment
+  license: MIT
+  min_ansible_version: 2.9
+  platforms:
+    - name: Ubuntu
+      versions:
+        - all
+    - name: Debian
+      versions:
+        - all
+    - name: EL
+      versions:
+        - 7
+        - 8
+  galaxy_tags:
+    - jenkins
+    - deployment
+    - ci
+    - cd

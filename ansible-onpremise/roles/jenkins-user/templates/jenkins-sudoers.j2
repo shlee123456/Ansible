@@ -1,0 +1,6 @@
+# jenkins-user/templates/jenkins-sudoers.j2
+{% if jenkins_sudo_passwordless %}
+{{ jenkins_user }} ALL=(ALL) NOPASSWD: ALL
+{% else %}
+{{ jenkins_user }} ALL=(ALL) ALL
+{% endif %}

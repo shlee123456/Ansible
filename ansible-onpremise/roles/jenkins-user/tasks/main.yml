@@ -1,0 +1,62 @@
+---
+# jenkins-user/tasks/main.yml
+
+# jenkins 그룹의 존재 여부를 확인합니다
+# raw 모듈은 결과를 다른 형식으로 반환하므로 접근 방식이 다릅니다
+- name: Check if jenkins group exists
+  raw: getent group jenkins || echo "Group does not exist"
+  register: group_check
+  changed_when: false
+
+# jenkins 그룹이 존재하지 않을 경우에만 그룹을 생성합니다
+# "is defined" 조건을 추가하여 변수가 존재하는지 확인
+- name: Create jenkins group
+  raw: groupadd -g 900 jenkins
+  when: group_check is defined and 'Group does not exist' in (group_check.stdout | default(''))
+
+# jenkins 사용자의 존재 여부를 확인합니다
+- name: Check if jenkins user exists  
+  raw: id jenkins || echo "User does not exist"
+  register: user_check
+  changed_when: false
+
+# jenkins 사용자가 존재하지 않을 경우에만 사용자를 생성합니다
+- name: Create jenkins user
+  raw: useradd -u 900 -g jenkins -m -s /bin/bash -c "Jenkins Deployment User" jenkins
+  when: user_check is defined and 'User does not exist' in (user_check.stdout | default(''))
+
+# jenkins 사용자가 실제로 생성되었는지 확인합니다
+- name: Verify jenkins user was created
+  raw: id jenkins
+  register: verify_user
+  failed_when: verify_user is defined and verify_user.rc is defined and verify_user.rc != 0
+
+# jenkins 사용자의 SSH 디렉토리를 생성하고 권한을 설정합니다
+- name: Create .ssh directory for jenkins
+  raw: mkdir -p /home/jenkins/.ssh && chown jenkins:jenkins /home/jenkins/.ssh && chmod 700 /home/jenkins/.ssh
+
+# authorized_keys 파일 생성 및 권한 설정
+- name: Set up authorized_keys file
+  raw: touch /home/jenkins/.ssh/authorized_keys && chown jenkins:jenkins /home/jenkins/.ssh/authorized_keys && chmod 600 /home/jenkins/.ssh/authorized_keys
+
+# jenkins 사용자에게 비밀번호 없이 sudo 권한을 부여합니다
+- name: Set up sudoers for jenkins
+  raw: echo "jenkins ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/jenkins && chmod 440 /etc/sudoers.d/jenkins
+
+# Docker 그룹이 있을 경우 jenkins 사용자를 Docker 그룹에 추가
+- name: Add jenkins to docker group if exists
+  raw: getent group docker && usermod -aG docker jenkins || echo "Docker group not found"
+  ignore_errors: yes
+
+# SSH 클라이언트 설정 추가 (호스트 키 확인 비활성화)
+- name: Configure SSH client settings
+  raw: |
+    mkdir -p /home/jenkins/.ssh/config.d
+    cat > /home/jenkins/.ssh/config << 'EOF'
+    Host *
+      StrictHostKeyChecking no
+      UserKnownHostsFile /dev/null
+      ServerAliveInterval 60
+    EOF
+    chown -R jenkins:jenkins /home/jenkins/.ssh
+    chmod 600 /home/jenkins/.ssh/config

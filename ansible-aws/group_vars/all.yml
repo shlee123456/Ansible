@@ -1,0 +1,11 @@
+---
+# 공통 변수 설정
+system_packages:
+  - vim
+  - git
+  - curl
+  - htop
+  - tree
+  - docker
+  - docker-compose
+timezone: Asia/Seoul
