@@ -2,6 +2,8 @@
 #msystech ansible_host=192.168.45.52
 # 사무실 mini-pc
 work-node1 ansible_host=192.168.45.54
+# 테스트 서버
+test-node1 ansible_host=192.168.45.231
 
 [servers:vars]
 ansible_user=puzzle
