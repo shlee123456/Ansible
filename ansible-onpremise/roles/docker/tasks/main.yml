@@ -72,6 +72,6 @@
 # 현재 사용자를 docker 그룹에 추가
 - name: Add user to docker group
   user:
-    name: ubuntu
+    name: puzzle
     groups: docker
     append: yes
