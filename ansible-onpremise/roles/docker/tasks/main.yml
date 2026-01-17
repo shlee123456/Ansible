@@ -1,4 +1,25 @@
 ---
+# Docker 공식 권장 설치 방법 (버전 호환성 보장)
+# 참고: https://docs.docker.com/engine/install/ubuntu/
+
+# 기존 Docker 관련 패키지 제거 (충돌 방지)
+- name: Remove old Docker packages
+  apt:
+    name:
+      - docker
+      - docker-engine
+      - docker.io
+      - containerd
+      - runc
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: absent
+    purge: yes
+  ignore_errors: yes
+
 # Docker 필수 패키지 설치
 - name: Install required packages
   apt:
@@ -11,27 +32,40 @@
     state: present
     update_cache: yes
 
-# Docker GPG key 추가
-- name: Add Docker GPG key
-  apt_key:
-    url: https://download.docker.com/linux/ubuntu/gpg
-    state: present
+# Docker GPG 키 디렉토리 생성
+- name: Create keyrings directory
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
 
-# Docker repository 추가
+# Docker 공식 GPG 키 다운로드
+- name: Download Docker GPG key
+  get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: '0644'
+    force: yes
+
+# Docker 저장소 추가 (공식 권장 방식)
 - name: Add Docker repository
   apt_repository:
-    repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
     state: present
+    filename: docker
     update_cache: yes
 
-# Docker 엔진 설치
-- name: Install Docker Engine
+# Docker 패키지 설치 (버전 자동 호환)
+# apt가 자동으로 호환되는 버전을 선택함
+- name: Install Docker packages
   apt:
     name:
       - docker-ce
       - docker-ce-cli
       - containerd.io
-    state: present
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: latest
     update_cache: yes
 
 # Docker 서비스 시작 및 활성화
@@ -41,37 +75,53 @@
     state: started
     enabled: yes
 
-# Docker Compose 설치
-- name: Install Docker Compose
-  get_url:
-    url: https://github.com/docker/compose/releases/download/v2.23.3/docker-compose-linux-x86_64
-    dest: /usr/local/bin/docker-compose
-    mode: '0755'
+# containerd 서비스 활성화
+- name: Start and enable containerd service
+  service:
+    name: containerd
+    state: started
+    enabled: yes
 
-# Docker 버전 확인
-- name: Check Docker version
-  command: docker --version
-  register: docker_version
-  changed_when: false
-
-# Docker Compose 버전 확인
-- name: Check Docker Compose version
-  command: docker-compose --version
-  register: docker_compose_version
-  changed_when: false
-
-# 버전 정보 출력
-- name: Display Docker version
-  debug:
-    msg: "{{ docker_version.stdout }}"
-
-- name: Display Docker Compose version
-  debug:
-    msg: "{{ docker_compose_version.stdout }}"
+# Docker 소켓 권한 설정
+- name: Ensure docker socket has correct permissions
+  file:
+    path: /var/run/docker.sock
+    mode: '0666'
+  ignore_errors: yes
 
 # 현재 사용자를 docker 그룹에 추가
 - name: Add user to docker group
   user:
-    name: puzzle
+    name: "{{ ansible_user }}"
     groups: docker
     append: yes
+
+# Docker 버전 확인
+- name: Check Docker version
+  command: docker version --format '{{ '{{' }}.Server.Version{{ '}}' }}'
+  register: docker_version
+  changed_when: false
+
+# Docker Compose 버전 확인 (v2 플러그인 방식)
+- name: Check Docker Compose version
+  command: docker compose version --short
+  register: docker_compose_version
+  changed_when: false
+
+# 버전 정보 출력
+- name: Display installed versions
+  debug:
+    msg: |
+      Docker Engine: {{ docker_version.stdout }}
+      Docker Compose: {{ docker_compose_version.stdout }}
+
+# Docker 설치 검증
+- name: Verify Docker installation
+  command: docker run --rm hello-world
+  register: docker_hello
+  changed_when: false
+  ignore_errors: yes
+
+- name: Display Docker verification result
+  debug:
+    msg: "Docker 설치 검증: {{ 'SUCCESS' if docker_hello.rc == 0 else 'FAILED - 재부팅 후 다시 시도하세요' }}"

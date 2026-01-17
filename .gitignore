@@ -1,10 +1,5 @@
-# Auto Claude data directory
-.auto-claude/
+# Context directory (local session history)
+.context/
 
-# Auto Claude generated files
-.auto-claude-security.json
-.auto-claude-status
+# IDE settings
 .claude_settings.json
-.worktrees/
-.security-key
-logs/security/

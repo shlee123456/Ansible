@@ -6,6 +6,23 @@
 - name: Install basic packages
   raw: apt-get install -y vim git curl htop tree net-tools unzip wget python3-pip
 
+# 한글 언어팩 설치 (vi 한글 깨짐 방지)
+- name: Install Korean language pack
+  raw: apt-get install -y language-pack-ko locales
+
+# 한글 로케일 생성 및 설정
+- name: Generate Korean locale
+  raw: locale-gen ko_KR.UTF-8
+
+- name: Set default locale to Korean UTF-8
+  raw: update-locale LANG=ko_KR.UTF-8 LC_ALL=ko_KR.UTF-8
+
+# /etc/environment에 로케일 환경변수 추가
+- name: Add locale environment variables
+  raw: |
+    grep -q "LANG=ko_KR.UTF-8" /etc/environment || echo "LANG=ko_KR.UTF-8" >> /etc/environment
+    grep -q "LC_ALL=ko_KR.UTF-8" /etc/environment || echo "LC_ALL=ko_KR.UTF-8" >> /etc/environment
+
 # timezone
 - name: Set timezone
   raw: timedatectl set-timezone Asia/Seoul

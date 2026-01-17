@@ -6,6 +6,13 @@ system_packages:
   - curl
   - htop
   - tree
-  - docker
-  - docker-compose
+  - net-tools
+  - unzip
+  - wget
+
+# 한글 로케일 설정
+locale: ko_KR.UTF-8
 timezone: Asia/Seoul
+
+# Docker 설정 (docker role에서 사용)
+docker_user: "{{ ansible_user }}"
