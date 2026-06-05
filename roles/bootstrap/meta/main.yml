@@ -1,0 +1,24 @@
+---
+galaxy_info:
+  role_name: bootstrap
+  author: puzzle-ai infra
+  description: >-
+    Python 미설치 Ubuntu/Debian 서버에 python3/python3-apt 를 raw 로 설치하고
+    facts 를 수집하는 최소 부트스트랩 역할 (onpremise/aws 공유).
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+  galaxy_tags:
+    - bootstrap
+    - python
+    - apt
+
+dependencies: []

@@ -1,10 +1,14 @@
 ---
 - name: Configure AWS Server
   hosts: aws_servers
-  become: yes  # sudo 권한 사용
+  gather_facts: no  # bootstrap 역할이 raw 로 시작하고 끝에서 setup 으로 facts 수집
+  become: yes       # sudo 권한 사용
 
   roles:
-    - common    # 기본 시스템 설정
-    # - ssh-keys  # ssh 키생성 설정
+    # 1) Python 미설치 환경(테스트 컨테이너 등) 부트스트랩. 실서버엔 Python 이 이미 있어 skip.
+    - bootstrap
+    # 2) 이후는 네이티브 모듈 역할
+    - common        # 기본 시스템 설정
     - docker
-      # - app     # 추후 필요한 역할 추가
+    # ssh-keys 는 옵트인 (manage_ssh_keys=true 또는 태그)
+    - { role: ssh-keys, tags: [ssh-keys] }

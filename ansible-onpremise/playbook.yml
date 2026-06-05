@@ -1,10 +1,15 @@
 ---
 - name: Configure Server
   hosts: servers
-  gather_facts: yes
+  gather_facts: no    # bootstrap 역할이 raw 로 시작하고 끝에서 setup 으로 facts 수집
   become: yes
 
   roles:
+    # 1) Python 미설치 서버 부트스트랩 (python3/python3-apt 설치 + facts 수집)
+    - bootstrap
+    # 2) 이후는 네이티브 모듈 역할
     - common
     - docker
-    #- jenkins-user
+    # ssh-keys / jenkins-user 는 옵트인 (태그 또는 -e 변수로 실행)
+    - { role: ssh-keys, tags: [ssh-keys] }
+    - { role: jenkins-user, tags: [jenkins], when: enable_jenkins | default(false) }

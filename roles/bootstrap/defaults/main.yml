@@ -1,0 +1,15 @@
+---
+# bootstrap 역할 기본값
+# 부트스트랩 단계에서 raw 로 설치할 최소 패키지 목록.
+# (공통 패키지 목록 system_packages 와는 다름 — 그것은 common 역할이 apt 모듈로 설치)
+# python3-apt 는 ansible apt 모듈이 동작하기 위한 필수 의존성.
+# python-is-python3 / python3-six / python3-pip 는 일부러 제외:
+#   - Debian 11 에는 python-is-python3 메타패키지가 없고
+#   - ansible_python_interpreter 가 이미 /usr/bin/python3 이므로 불필요.
+bootstrap_packages:
+  - python3
+  - python3-apt
+
+# raw 단계에서 apt 잠금 대기 시간(초). 클라우드 이미지의 부팅 직후
+# unattended-upgrades 가 apt 락을 잡고 있을 때 실패를 줄여 줌.
+bootstrap_apt_lock_timeout: 120

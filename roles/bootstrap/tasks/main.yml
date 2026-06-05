@@ -1,0 +1,54 @@
+---
+# ============================================================
+# bootstrap 역할 — Python 미설치 Ubuntu/Debian 서버용 최소 부트스트랩
+# 전제: play 는 gather_facts: no 로 시작해야 함 (이 시점에 facts 없음)
+# raw 모듈만 사용 (대상에 Python 이 없을 수 있으므로 네이티브 모듈 사용 불가)
+# onpremise / aws 양쪽이 공유한다 (roles_path = roles:../roles).
+# ============================================================
+
+# 1) python3 와 python3-apt 가 이미 있는지 읽기 전용으로 검사.
+#    출력에 'PY_OK' 가 포함되면 두 패키지 모두 존재한다는 의미.
+#    changed_when: false 로 검사 task 는 절대 changed 를 보고하지 않음.
+- name: Python 부트스트랩 필요 여부 검사 (raw)
+  ansible.builtin.raw: >-
+    command -v python3 >/dev/null 2>&1
+    && dpkg-query -W -f='${Status}' python3-apt 2>/dev/null | grep -q 'install ok installed'
+    && echo PY_OK || echo PY_MISSING
+  register: bootstrap_check
+  changed_when: false
+  # 검사는 실패해도(예: dpkg 없음) 다음 설치 단계가 처리하므로 무시
+  failed_when: false
+
+# 2) python3 또는 python3-apt 가 없을 때만 apt 로 설치.
+#    - when 으로 이미 준비된 호스트(2회차 등)는 task 자체를 skip → changed 없음
+#    - changed_when 은 apt 가 패키지를 실제로 '구성(Setting up)'했을 때만 true.
+#      ('Setting up ' 는 새 패키지가 설치될 때만 출력되는 신뢰 가능한 마커.
+#       'newly installed' 문자열 매칭은 Debian/Ubuntu 출력 변형에 취약해 사용하지 않음.)
+#    - DEBIAN_FRONTEND=noninteractive 로 프롬프트 차단
+#    - -o DPkg::Lock::Timeout 으로 부팅 직후 apt 락 경합을 대기
+- name: python3 / python3-apt 설치 (raw, Python 미설치 시에만)
+  ansible.builtin.raw: >-
+    export DEBIAN_FRONTEND=noninteractive;
+    apt-get -o DPkg::Lock::Timeout={{ bootstrap_apt_lock_timeout }} update &&
+    apt-get -o DPkg::Lock::Timeout={{ bootstrap_apt_lock_timeout }} install -y {{ bootstrap_packages | join(' ') }}
+  register: bootstrap_install
+  when: "'PY_OK' not in (bootstrap_check.stdout | default(''))"
+  changed_when: >-
+    bootstrap_install is not skipped
+    and 'Setting up ' in (bootstrap_install.stdout | default(''))
+
+# 3) 이 시점에 python3 가 보장됨 → facts 를 명시적으로 수집.
+#    setup 모듈은 read-only 라 changed 를 보고하지 않음(멱등).
+#    이후 common/docker 등 역할이 ansible_user, ansible_distribution,
+#    ansible_distribution_release, ansible_architecture 를 사용할 수 있게 됨.
+- name: facts 수집 (setup) — 이후 네이티브 모듈에서 사용
+  ansible.builtin.setup:
+
+# 4) (선택) 부트스트랩 결과 확인용 디버그. 변경을 만들지 않음.
+- name: 부트스트랩 결과 표시
+  ansible.builtin.debug:
+    msg: >-
+      bootstrap: distro={{ ansible_distribution }} {{ ansible_distribution_release }},
+      arch={{ ansible_architecture }}, user={{ ansible_user | default('?') }},
+      python={{ ansible_python_interpreter | default('/usr/bin/python3') }}
+    verbosity: 1
