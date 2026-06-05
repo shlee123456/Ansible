@@ -39,7 +39,8 @@ Ansible 기반 IaC(Infrastructure as Code) 프로젝트로, 온프레미스 및 
 ## 기술 스택
 
 - **Ansible**: 인프라 자동화 도구
-- **Python 3**: Ansible 인터프리터
+- **Python 3.11+**: Ansible 인터프리터
+- **pyenv**: Python 버전 및 가상환경 관리
 - **YAML**: 플레이북 및 설정 파일
 - **Docker/Docker Compose**: 컨테이너 플랫폼
 - **OpenSSH**: Ed25519 키 기반 인증
@@ -49,16 +50,28 @@ Ansible 기반 IaC(Infrastructure as Code) 프로젝트로, 온프레미스 및 
 ```
 ansible/
 ├── CLAUDE.md                   # 루트: 전역 규칙
+├── Makefile                    # 편의 명령어 (make help)
+├── requirements.txt            # Python 의존성
+├── .python-version             # pyenv 가상환경 (ansible)
 ├── .context/                   # 맥락 관리 (gitignore 대상)
 │   ├── history/                # 세션 히스토리
 │   └── terminal/               # 터미널 로그
+├── scripts/                    # 유틸리티 스크립트
+│   ├── setup-env.sh            # pyenv 환경 설정
+│   ├── ping.sh                 # SSH 연결 테스트
+│   ├── facts.sh                # 호스트 정보 수집
+│   └── list-hosts.sh           # 인벤토리 조회
 ├── ansible-onpremise/          # 온프레미스 환경
 │   ├── CLAUDE.md               # 서브: 온프레미스 규칙
+│   ├── ansible.cfg
+│   ├── start.sh
 │   ├── playbook.yml
 │   ├── inventory/hosts
 │   └── roles/
 ├── ansible-aws/                # AWS 환경
 │   ├── CLAUDE.md               # 서브: AWS 규칙
+│   ├── ansible.cfg
+│   ├── start.sh
 │   ├── playbook.yml
 │   ├── inventory/hosts
 │   └── roles/
@@ -83,11 +96,37 @@ ansible/
 - 공통 변수: `group_vars/all.yml`
 - 역할별 기본값: `roles/[role]/defaults/main.yml`
 - 멱등성 보장: `changed_when`, `when` 조건 활용
+- 사용자 변수화: `{{ ansible_user }}` 사용 (하드코딩 금지)
 
 ### 권한 설정
 - .ssh 디렉토리: `0700`
 - 비공개 키: `0600`
 - authorized_keys: `0644`
+
+## 개발환경 설정
+
+### pyenv 설치 (최초 1회)
+```bash
+# macOS
+brew install pyenv pyenv-virtualenv
+
+# 쉘 설정 (~/.zshrc 또는 ~/.bashrc)
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+eval "$(pyenv virtualenv-init -)"
+```
+
+### 프로젝트 환경 설정
+```bash
+# 자동 설정 스크립트 실행
+./scripts/setup-env.sh
+
+# 또는 수동 설정
+pyenv virtualenv 3.11 ansible
+pyenv local ansible
+pip install -r requirements.txt
+```
 
 ## 세션 관리 규칙
 
@@ -102,23 +141,39 @@ ansible/
 
 ## 자주 사용하는 명령어
 
-### 온프레미스
+### Makefile (권장)
 ```bash
+make help           # 사용 가능한 명령어 목록
+make ping-onprem    # 온프레미스 연결 테스트
+make ping-aws       # AWS 연결 테스트
+make check-onprem   # 온프레미스 드라이런
+make check-aws      # AWS 드라이런
+make run-onprem     # 온프레미스 실행
+make run-aws        # AWS 실행
+```
+
+### start.sh 스크립트
+```bash
+# 온프레미스
 cd ansible-onpremise
-./start.sh
-# 또는
-ansible-playbook -i inventory/hosts playbook.yml -k -K -v
-```
+./start.sh              # 기본 실행
+./start.sh -c           # 드라이런 (--check --diff)
+./start.sh -l work-node1  # 특정 호스트만
+./start.sh -t docker    # 특정 태그만
+./start.sh -h           # 도움말
 
-### AWS
-```bash
+# AWS
 cd ansible-aws
-ansible-playbook -i inventory/hosts playbook.yml
+./start.sh              # 기본 실행 (SSH 키 인증)
+./start.sh -c           # 드라이런
 ```
 
-### 드라이런 (미리보기)
+### 유틸리티 스크립트
 ```bash
-ansible-playbook -i inventory/hosts playbook.yml --check --diff
+./scripts/ping.sh onpremise   # 온프레미스 연결 테스트
+./scripts/ping.sh aws         # AWS 연결 테스트
+./scripts/facts.sh onpremise  # 시스템 정보 수집
+./scripts/list-hosts.sh all   # 전체 호스트 목록
 ```
 
 ### 로그 기록
@@ -147,4 +202,5 @@ ls -t .context/terminal/*.log 2>/dev/null | tail -n +11 | xargs rm -f
 
 - [Ansible 공식 문서](https://docs.ansible.com/)
 - [Docker 설치 가이드](https://docs.docker.com/engine/install/ubuntu/)
+- [pyenv 설치 가이드](https://github.com/pyenv/pyenv)
 - `claude-docs/CLAUDE.md`: CLAUDE.md 작성 가이드라인

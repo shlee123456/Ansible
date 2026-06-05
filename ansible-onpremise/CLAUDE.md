@@ -24,28 +24,39 @@ Ubuntu 기반 온프레미스 서버의 인프라 자동화 구성
 
 ```
 ansible-onpremise/
+├── .python-version      # pyenv 가상환경 (ansible)
 ├── ansible.cfg          # Ansible 설정 (host_key_checking=False)
 ├── playbook.yml         # 메인 플레이북
-├── start.sh             # 실행 스크립트
+├── start.sh             # 실행 스크립트 (옵션 지원)
+├── SETUP.md             # 상세 개발환경 가이드
 ├── inventory/hosts      # 호스트 목록
 ├── group_vars/all.yml   # 공통 변수
 └── roles/
-    ├── common/          # 기본 시스템 설정
-    ├── docker/          # Docker 설치
-    ├── jenkins-user/    # Jenkins 배포 사용자
-    └── ssh-keys/        # SSH 키 관리
+    ├── common/          # 기본 시스템 설정 (네이티브 모듈, 멱등)
+    ├── docker/          # Docker CE, Compose 설치
+    ├── jenkins-user/    # Jenkins 배포 사용자 (옵트인: enable_jenkins=true)
+    └── ssh-keys/        # SSH 키 관리 (옵트인: manage_ssh_keys=true)
 ```
+
+> 부트스트랩은 저장소 루트의 **공유 `roles/bootstrap`** 역할이 담당합니다
+> (`ansible.cfg` 의 `roles_path = roles:../roles` 로 탐색).
 
 ## 로컬 코딩 컨벤션
 
-### 부트스트랩 단계 (Python 미설치 환경)
-```yaml
-# ✅ raw 모듈 사용 (Python 의존성 없음)
-- name: Update apt cache
-  raw: apt-get update
+### 부트스트랩 (Python 미설치 환경) — 공유 역할 사용
+playbook 은 `gather_facts: no` 로 시작하고 공유 `bootstrap` 역할을 **첫 역할**로 둡니다.
+이 역할이 `raw` 로 `python3`/`python3-apt` 만 설치한 뒤 `setup` 으로 facts 를 수집하므로,
+이후 역할은 네이티브 모듈을 그대로 사용할 수 있습니다.
 
-- name: Install Python dependencies
-  raw: apt-get install -y python3-six python3-jmespath
+```yaml
+- name: Configure Server
+  hosts: servers
+  gather_facts: no
+  become: yes
+  roles:
+    - bootstrap   # python3/python3-apt 설치 + facts 수집 (공유 역할)
+    - common      # 이후 네이티브 모듈 역할
+    - docker
 ```
 
 ### Python 설치 후
@@ -60,22 +71,50 @@ ansible-onpremise/
     - git
 ```
 
+### 사용자 변수화 (하드코딩 금지)
+```yaml
+# ✅ 올바른 예시
+- name: Add user to docker group
+  user:
+    name: "{{ ansible_user }}"
+    groups: docker
+
+# ❌ 잘못된 예시
+- name: Add user to docker group
+  user:
+    name: puzzle  # 하드코딩 금지
+    groups: docker
+```
+
 ## 역할(Role) 설명
 
 | 역할 | 상태 | 설명 |
 |------|------|------|
-| common | 활성 | 기본 패키지, 시간대 설정 |
-| docker | 활성 | Docker CE, Compose 설치 |
-| jenkins-user | 비활성 | Jenkins 배포 사용자 설정 |
-| ssh-keys | 비활성 | Ed25519 키 쌍 생성 |
+| bootstrap | 활성 | (공유) python3/python3-apt 설치 + facts 수집 |
+| common | 활성 | 기본 패키지, 한글 로케일, 시간대 설정 (네이티브·멱등) |
+| docker | 활성 | Docker CE, Compose Plugin 설치 |
+| ssh-keys | 옵트인 | Ed25519 키 쌍 생성 (`-e manage_ssh_keys=true` 또는 `-t ssh-keys`) |
+| jenkins-user | 옵트인 | Jenkins 배포 사용자 설정 (`-e enable_jenkins=true`) |
+
+> **docker 역할 검증 변수**: `docker_verify`(데몬 hello-world 검증)와
+> `docker_manage_service`(서비스 시작)는 기본값이 안전하게 설정돼 있어 컨테이너
+> 테스트에서 자동으로 꺼집니다. 실서버에서는 `-e docker_verify=true` 로 데몬 검증을 켜세요.
 
 ## 실행 명령어
 
+### start.sh 스크립트 (권장)
+```bash
+./start.sh              # 기본 실행
+./start.sh -c           # 드라이런 (--check --diff)
+./start.sh -l work-node1  # 특정 호스트만 실행
+./start.sh -t docker    # 특정 태그만 실행
+./start.sh -v           # 상세 출력 (-vvv)
+./start.sh -h           # 도움말
+```
+
+### 직접 실행
 ```bash
 # 기본 실행
-./start.sh
-
-# 직접 실행
 ansible-playbook -i inventory/hosts playbook.yml -k -K -v
 
 # 특정 노드만 실행
@@ -85,18 +124,34 @@ ansible-playbook -i inventory/hosts playbook.yml -l test-node1 -k -K -v
 ansible-playbook -i inventory/hosts playbook.yml --check --diff -k -K
 ```
 
-## 로컬 개발환경
-
+### Makefile (루트 디렉토리에서)
 ```bash
-# pyenv 가상환경 설정
-pyenv virtualenv 3.11.0 ansible-onpremise
-pyenv local ansible-onpremise
-pip install ansible
+make ping-onprem    # 연결 테스트
+make check-onprem   # 드라이런
+make run-onprem     # 실행
+```
 
-# sshpass 설치 (macOS)
+## 개발환경 설정
+
+### pyenv 가상환경 (권장)
+```bash
+# 프로젝트 루트에서 자동 설정
+cd ..
+./scripts/setup-env.sh
+
+# 또는 수동 설정
+pyenv virtualenv 3.11 ansible
+pyenv local ansible
+pip install ansible jmespath
+```
+
+### sshpass 설치 (macOS)
+```bash
 brew install hudochenkov/sshpass/sshpass
+```
 
-# 환경변수로 비밀번호 설정
+### 환경변수로 비밀번호 설정
+```bash
 export SSHPASS='your_password'
 sshpass -e ansible-playbook -i inventory/hosts playbook.yml -k -K -v
 ```
@@ -108,4 +163,5 @@ sshpass -e ansible-playbook -i inventory/hosts playbook.yml -k -K -v
 | `playbook.yml` | 메인 플레이북 (역할 실행 순서 정의) |
 | `inventory/hosts` | 호스트 IP, 사용자, Python 경로 설정 |
 | `group_vars/all.yml` | timezone, 패키지 목록 등 공통 변수 |
+| `ansible.cfg` | host_key_checking, Python 인터프리터 설정 |
 | `SETUP.md` | 상세 개발환경 설정 가이드 |

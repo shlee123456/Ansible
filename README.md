@@ -14,12 +14,13 @@ Ansible 기반 IaC(Infrastructure as Code) 프로젝트로, 온프레미스 및 
 
 - **로컬 환경**
   - Python 3.11+
-  - Ansible 2.9+
+  - Ansible (ansible-core 2.16+)
+  - Galaxy 컬렉션: `ansible-galaxy collection install -r requirements.yml`
   - sshpass (온프레미스용): `brew install hudochenkov/sshpass/sshpass`
 
 - **타겟 서버**
-  - Ubuntu 20.04/22.04 LTS
-  - SSH 접속 가능
+  - Ubuntu 22.04/24.04 LTS, Debian 11/12
+  - SSH 접속 가능 (Python 미설치도 가능 — bootstrap 역할이 자동 설치)
   - sudo 권한
 
 ## 빠른 시작
@@ -58,14 +59,16 @@ ansible-playbook -i inventory/hosts playbook.yml
 
 ```
 ansible/
+├── roles/bootstrap/      # 공유 부트스트랩 역할 (python3 설치 + facts 수집)
 ├── ansible-onpremise/    # 온프레미스 환경
 │   ├── playbook.yml      # 메인 플레이북
 │   ├── inventory/hosts   # 호스트 목록
-│   └── roles/            # 역할 (common, docker, jenkins-user, ssh-keys)
+│   └── roles/            # 역할 (common, docker, ssh-keys, jenkins-user)
 ├── ansible-aws/          # AWS 환경
 │   ├── playbook.yml
 │   ├── inventory/hosts
-│   └── roles/
+│   └── roles/            # 역할 (common, docker, ssh-keys)
+├── test/                 # Docker 기반 로컬 테스트 하니스
 └── claude-docs/          # CLAUDE.md 가이드라인 (서브모듈)
 ```
 
@@ -76,7 +79,8 @@ ansible/
 | Docker CE | latest | 컨테이너 엔진 |
 | Docker Compose | v2 (plugin) | 다중 컨테이너 관리 |
 | 시스템 패키지 | - | vim, git, curl, htop, tree, net-tools |
-| 한글 로케일 | ko_KR.UTF-8 | 한글 깨짐 방지 |
+| 로케일 | 온프레미스 ko_KR / AWS en_US | group_vars 의 `locale` 변수로 설정 |
+| Python | bootstrap | 미설치 서버에 python3/python3-apt 자동 설치 |
 
 ## 환경별 설정
 
@@ -85,6 +89,19 @@ ansible/
 | 사용자 | puzzle | ubuntu |
 | 인증 | 비밀번호 | SSH 키 |
 | 호스트 | 192.168.45.x | EC2 Public IP |
+
+## 로컬 테스트 (Docker 하니스)
+
+실제 서버 없이 일회용 Ubuntu/Debian 컨테이너에 플레이북을 2회 적용해
+멱등성(changed=0)을 검증합니다.
+
+```bash
+make test                                      # 전체 (onprem+aws × ubuntu22.04/24.04 + debian12)
+cd test && ./run-tests.sh -e aws -d debian12   # 특정 시나리오만
+cd test && ./run-tests.sh --no-docker-daemon   # 데몬 의존 작업 제외 (DinD 불안정 시)
+```
+
+자세한 사용법과 한계(연결 방식·docker-in-docker 등)는 [test/README.md](test/README.md) 참조.
 
 ## 문제 해결
 
@@ -110,7 +127,7 @@ locale
 ## 참고 문서
 
 - [Ansible 공식 문서](https://docs.ansible.com/)
-- [Docker 설치 가이드](https://docs.docker.com/engine/install/ubuntu/)
+- [Docker 설치 가이드](https://docs.docker.com/engine/install/)
 - [ansible-onpremise/SETUP.md](ansible-onpremise/SETUP.md) - 로컬 개발환경 상세 설정
 
 ## 라이선스
