@@ -1,0 +1,84 @@
+# syntax=docker/dockerfile:1
+#
+# systemd 활성화 + SSH 데몬 포함 테스트 베이스 이미지
+# (Docker 역할의 service/systemctl 호출 및 docker-in-docker 검증용)
+#
+# 중요: python3 는 일부러 설치하지 않습니다.
+#       raw 모듈 부트스트랩(LOCKED DECISION #2)을 실제로 검증하기 위함입니다.
+#       systemd / sshd / apt 전제 패키지만 설치합니다.
+#
+# 사용 베이스: ubuntu:22.04 / ubuntu:24.04 / debian:12
+# 빌드 인자 BASE_IMAGE 로 대상 배포판을 선택합니다.
+
+ARG BASE_IMAGE=ubuntu:22.04
+FROM ${BASE_IMAGE}
+
+# 비대화형 apt (빌드 중 tzdata 등 프롬프트 방지)
+ENV DEBIAN_FRONTEND=noninteractive
+ENV container=docker
+
+# systemd + sshd + apt 전제 패키지 설치
+# - systemd, systemd-sysv: PID 1 로 동작할 init
+# - openssh-server: (선택) SSH 연결 모드용. 기본 harness 는 docker connection 사용
+# - sudo: become(sudo) 경로 검증용
+# - ca-certificates: get_url(https) 의 TLS 검증용 (python 미설치라도 미리 둠)
+# - tzdata: timezone 모듈이 'Asia/Seoul' 을 찾으려면 시간대 DB 가 필요.
+#           실제 클라우드/서버 Ubuntu·Debian 이미지에는 기본 포함되나, docker 의
+#           최소 base 이미지(ubuntu:22.04 등)에는 빠져 있어 명시적으로 설치한다.
+#           (이는 OS 기본 자산이며 부트스트랩 대상이 아님. 다만 role 이 직접
+#            tzdata 를 설치하면 더 견고하다 — README 한계 항목 참고.)
+# - iproute2: net-tools 대체 진단 도구 (디버깅 편의)
+# python3 / python3-apt 는 의도적으로 제외 (부트스트랩이 설치)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        systemd \
+        systemd-sysv \
+        openssh-server \
+        sudo \
+        ca-certificates \
+        tzdata \
+        iproute2 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# 컨테이너 환경에서 불필요하거나 부팅을 방해하는 systemd 유닛 비활성화
+# (getty, 콘솔, 네트워크 대기 등 — 컨테이너에서는 의미 없거나 부팅 지연 유발)
+RUN systemctl mask \
+        getty.target \
+        getty-static.service \
+        systemd-udevd.service \
+        systemd-udev-trigger.service \
+        systemd-firstboot.service \
+        systemd-networkd-wait-online.service \
+        dev-hugepages.mount \
+        sys-fs-fuse-connections.mount \
+        sys-kernel-config.mount \
+        sys-kernel-debug.mount \
+    2>/dev/null || true
+
+# sshd 호스트 키 생성 + 실행 디렉터리 (SSH 연결 모드를 쓸 경우 대비)
+RUN ssh-keygen -A \
+    && mkdir -p /run/sshd \
+    && systemctl enable ssh 2>/dev/null || true
+
+# 테스트 대상 일반 사용자 생성
+#   - puzzle : 온프레미스 플레이북(ansible_user=puzzle) 모사
+#   - ubuntu : AWS 플레이북(ansible_user=ubuntu) 모사
+# 두 사용자 모두 미리 만들어 ssh-keys / docker 그룹 추가 등 역할이 동작하게 함.
+#
+# 중요: 두 사용자 모두 NOPASSWD sudo 를 부여한다.
+#   본 하니스는 docker 연결 플러그인 + become(sudo)로 역할 "로직과 멱등성"을 검증한다.
+#   프로덕션 온프레미스의 비밀번호 sudo(-K) 경로는 (README 한계 항목대로) 검증 범위가
+#   아니므로, become 이 비대화형으로 동작하도록 puzzle 에게도 NOPASSWD 를 준다.
+#   (비밀번호 sudo 를 그대로 두면 'sudo: a password is required' 로 즉시 실패함.)
+RUN useradd --create-home --shell /bin/bash puzzle \
+    && echo 'puzzle:puzzle' | chpasswd \
+    && echo 'puzzle ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/puzzle \
+    && chmod 0440 /etc/sudoers.d/puzzle \
+    && (id -u ubuntu >/dev/null 2>&1 || useradd --create-home --shell /bin/bash ubuntu) \
+    && echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ubuntu \
+    && chmod 0440 /etc/sudoers.d/ubuntu
+
+# systemd 가 PID 1 로 뜨도록 함. --privileged + cgroup 마운트가 있어야 정상 동작.
+STOPSIGNAL SIGRTMIN+3
+ENTRYPOINT ["/lib/systemd/systemd"]

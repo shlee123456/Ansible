@@ -1,0 +1,15 @@
+---
+# 테스트 하니스가 필요로 하는 Ansible Galaxy 컬렉션
+# 설치:
+#   <venv>/bin/ansible-galaxy collection install -r test/requirements.yml
+#
+# - community.docker : docker 연결 플러그인(컨테이너 대상) + docker_* 모듈
+# - community.general: locale_gen 등 역할이 사용하는 모듈
+# - community.crypto : ssh-keys 역할의 openssh_keypair (onprem 래퍼가 검증)
+collections:
+  - name: community.docker
+    version: ">=3.4.0"
+  - name: community.general
+    version: ">=7.0.0"
+  - name: community.crypto
+    version: ">=2.0.0"

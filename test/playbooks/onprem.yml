@@ -1,0 +1,24 @@
+---
+# ── 온프레미스 플레이북 검증용 래퍼 ──
+#
+# 프로덕션 ansible-onpremise/playbook.yml 과 동일한 역할 구성
+# (bootstrap → common → ssh-keys → docker)을 그대로 실행합니다.
+# 차이는 대상 호스트(test 인벤토리의 onprem 그룹)와, 컨테이너에서 데몬 검증을
+# var 로 끄는 것뿐입니다. 검증 대상 코드(역할)는 roles_path 로 원본을 로드하므로
+# 복사본이 없고 드리프트가 발생하지 않습니다.
+#
+# 부트스트랩: 공유 roles/bootstrap 이 raw 로 python3/python3-apt 를 설치하고 facts 를
+# 수집합니다 → Python 미설치 컨테이너에서 LOCKED #2 패턴(프로덕션 경로)을 그대로 검증.
+
+- name: 온프레미스 서버 구성 검증
+  hosts: onprem
+  gather_facts: false   # bootstrap 역할이 raw 로 시작하고 끝에서 setup 으로 facts 수집
+  become: true
+  vars:
+    manage_ssh_keys: true   # 하니스에서 ssh-keys 역할을 실제로 실행해 검증
+
+  roles:
+    - bootstrap
+    - { role: common, tags: [common] }
+    - { role: ssh-keys, tags: [ssh-keys] }
+    - { role: docker, tags: [docker] }

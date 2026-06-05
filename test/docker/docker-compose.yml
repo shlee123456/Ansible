@@ -1,0 +1,81 @@
+# ── 선택적: docker-compose 로 컨테이너 일괄 기동 ──
+#
+# run-tests.sh 가 docker run 으로 컨테이너를 직접 띄우므로 compose 는 필수가 아닙니다.
+# 다만 "컨테이너만 띄워 두고 수동으로 ansible-playbook 을 반복 실행"하며 디버깅하고
+# 싶을 때 편리합니다.
+#
+#   docker compose -f test/docker/docker-compose.yml up -d --build
+#   ANSIBLE_CONFIG=test/ansible.cfg \
+#     <venv>/bin/ansible-playbook -i test/inventory/hosts.yml test/playbooks/onprem.yml -l onprem-ubuntu2204
+#   docker compose -f test/docker/docker-compose.yml down
+#
+# 주의: systemd-in-docker 를 위해 privileged + cgroup 마운트가 필요합니다(아래 anchor).
+
+x-systemd-target: &systemd_target
+  build:
+    context: .
+    dockerfile: Dockerfile.systemd
+  privileged: true
+  cgroup: host                # Docker Compose v2 의 cgroupns=host 대응
+  tmpfs:
+    - /run
+    - /run/lock
+  volumes:
+    - /sys/fs/cgroup:/sys/fs/cgroup:rw
+  stop_signal: SIGRTMIN+3
+  # 컨테이너 이름은 inventory/hosts.yml 의 ansible_host 와 정확히 일치해야 함
+
+services:
+  onprem-ubuntu2204:
+    <<: *systemd_target
+    build:
+      context: .
+      dockerfile: Dockerfile.systemd
+      args:
+        BASE_IMAGE: ubuntu:22.04
+    container_name: ans-test-onprem-ubuntu2204
+
+  onprem-ubuntu2404:
+    <<: *systemd_target
+    build:
+      context: .
+      dockerfile: Dockerfile.systemd
+      args:
+        BASE_IMAGE: ubuntu:24.04
+    container_name: ans-test-onprem-ubuntu2404
+
+  onprem-debian12:
+    <<: *systemd_target
+    build:
+      context: .
+      dockerfile: Dockerfile.systemd
+      args:
+        BASE_IMAGE: debian:12
+    container_name: ans-test-onprem-debian12
+
+  aws-ubuntu2204:
+    <<: *systemd_target
+    build:
+      context: .
+      dockerfile: Dockerfile.systemd
+      args:
+        BASE_IMAGE: ubuntu:22.04
+    container_name: ans-test-aws-ubuntu2204
+
+  aws-ubuntu2404:
+    <<: *systemd_target
+    build:
+      context: .
+      dockerfile: Dockerfile.systemd
+      args:
+        BASE_IMAGE: ubuntu:24.04
+    container_name: ans-test-aws-ubuntu2404
+
+  aws-debian12:
+    <<: *systemd_target
+    build:
+      context: .
+      dockerfile: Dockerfile.systemd
+      args:
+        BASE_IMAGE: debian:12
+    container_name: ans-test-aws-debian12
