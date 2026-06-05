@@ -6,6 +6,15 @@ system_packages:
   - curl
   - htop
   - tree
-  - docker
-  - docker-compose
+  - net-tools
+  - unzip
+  - wget
+
+# 로케일 설정 (AWS 는 영문 기본 — ko_KR 하드코딩 금지)
+locale: en_US.UTF-8
+
+# 시간대 설정
 timezone: Asia/Seoul
+
+# Docker 설정 (docker role에서 사용)
+docker_user: "{{ ansible_user }}"

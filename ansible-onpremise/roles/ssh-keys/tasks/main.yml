@@ -1,25 +1,51 @@
 ---
-- name: Ensure .ssh directory exists           # ssh 디렉토리 생성 후 권한 설정
-  file:
-    path: /home/ubuntu/.ssh
+# SSH 키 관리 역할 (온프레미스)
+# 사용자별 Ed25519 키 쌍 생성 및 권한 설정.
+# 기본 비활성: manage_ssh_keys=true 일 때만 실행 (playbook 의 -e 또는 태그로 제어).
+# 홈 디렉토리는 facts(ansible_user_dir)에서 도출 → /home/<user> 하드코딩 금지.
+
+- name: 대상 사용자 홈 경로 조회 (getent)
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ ansible_user }}"
+  when: manage_ssh_keys | bool
+
+- name: SSH 경로 사실 설정
+  ansible.builtin.set_fact:
+    ssh_user_home: "{{ ansible_user_dir | default(getent_passwd[ansible_user][4]) }}"
+  when: manage_ssh_keys | bool
+
+- name: .ssh 디렉토리 생성 (0700)
+  ansible.builtin.file:
+    path: "{{ ssh_user_home }}/.ssh"
     state: directory
     mode: '0700'
-    owner: ubuntu
-    group: ubuntu
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+  when: manage_ssh_keys | bool
 
-- name: Generate Ed25519 SSH key               # SSH 키 생성 
-  openssh_keypair:
-    path: /home/ubuntu/.ssh/id_ed25519
-    type: ed25519
-    owner: ubuntu
-    group: ubuntu
+- name: Ed25519 SSH 키 생성 (개인키 0600)
+  # openssh_keypair 의 mode 는 개인키와 공개키(.pub) 양쪽에 적용된다.
+  # 따라서 .pub 권한을 별도 file task(0644)로 다시 설정하면 매 실행 0600↔0644 가
+  # 반복되어 멱등성이 깨진다. 공개키 권한 정책 규정이 없으므로 0600 으로 통일한다.
+  community.crypto.openssh_keypair:
+    path: "{{ ssh_user_home }}/.ssh/id_{{ ssh_key_type }}"
+    type: "{{ ssh_key_type }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: '0600'
+    comment: "{{ ssh_key_comment }}"
+  when: manage_ssh_keys | bool
 
-- name: Get public key content                # SSH 퍼블릭 키 생성
-  command: cat /home/ubuntu/.ssh/id_ed25519.pub
-  register: public_key_content
-  changed_when: false
+- name: 공개키 내용 읽기 (slurp, check_mode 안전)
+  ansible.builtin.slurp:
+    src: "{{ ssh_user_home }}/.ssh/id_{{ ssh_key_type }}.pub"
+  register: ssh_pubkey
+  when: manage_ssh_keys | bool
 
-- name: Display public key
-  debug:
-    msg: "{{ public_key_content.stdout }}"
+- name: 공개키 출력
+  ansible.builtin.debug:
+    msg: >-
+      === SSH 공개키 ({{ inventory_hostname }}) ===
+      {{ ssh_pubkey.content | b64decode }}
+  when: manage_ssh_keys | bool

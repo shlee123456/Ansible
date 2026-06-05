@@ -1,0 +1,32 @@
+---
+# common 역할 기본값
+# 우선순위: group_vars/all.yml > 이 파일 (group_vars 가 정의되면 이 값을 덮어씀)
+# 모든 값은 변수화하여 환경별로 group_vars 에서만 조정한다.
+
+# 설치할 시스템 기본 패키지 목록
+# group_vars/all.yml 의 system_packages 가 단일 소스이며, 여기 값은 폴백이다.
+common_packages: "{{ system_packages | default(default_system_packages) }}"
+
+# group_vars 가 없을 때 사용할 폴백 패키지 목록
+default_system_packages:
+  - vim
+  - git
+  - curl
+  - htop
+  - tree
+  - net-tools
+  - unzip
+  - wget
+
+# 로케일 / 시간대 (group_vars 가 우선, 없으면 아래 기본값)
+# 온프레미스 기본은 한글 로케일
+common_locale: "{{ locale | default('ko_KR.UTF-8') }}"
+common_timezone: "{{ timezone | default('Asia/Seoul') }}"
+
+# 로케일 생성/적용 활성화 여부
+# (POSIX 만 필요한 최소 환경이라면 false 로 끌 수 있음)
+common_manage_locale: true
+
+# locales 패키지 (Debian/Ubuntu 공통, locale-gen 제공)
+# language-pack-* 는 Ubuntu 전용이므로 사용하지 않는다.
+common_locales_package: locales

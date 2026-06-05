@@ -1,77 +1,160 @@
 ---
-# Docker 필수 패키지 설치
-- name: Install required packages
-  apt:
-    name:
-      - apt-transport-https
-      - ca-certificates
-      - curl
-      - gnupg
-      - lsb-release
+# docker 역할: Docker CE + Compose 플러그인 설치 (공식 apt 저장소)
+# 참고: https://docs.docker.com/engine/install/  (ubuntu / debian 공통 흐름)
+# 전제: python3 + python3-apt 부트스트랩 완료, facts 수집 완료.
+# Ubuntu / Debian 모두 동작하도록 저장소 경로/아키텍처/코드네임을 facts 로 결정한다.
+# 2회차 실행 시 changed=0 (state: present, get_url force 미사용, creates/changed_when 가드).
+
+# APT 아키텍처 확정: dpkg --print-architecture (amd64 / arm64 등)
+# 멱등: 읽기 전용 명령이므로 changed_when:false
+- name: APT 아키텍처 확인 (dpkg)
+  ansible.builtin.command: dpkg --print-architecture
+  register: docker_dpkg_arch_result
+  changed_when: false
+  check_mode: false
+
+- name: APT 아키텍처 사실 설정
+  ansible.builtin.set_fact:
+    docker_dpkg_arch: "{{ docker_dpkg_arch_result.stdout | trim }}"
+
+# 구버전/충돌 Docker 패키지만 제거 (이 역할이 설치하는 패키지는 제외 → churn 방지)
+# 이미 없으면 changed=false 이므로 ignore_errors 불필요.
+- name: 구버전 Docker 패키지 제거
+  ansible.builtin.apt:
+    name: "{{ docker_conflicting_packages }}"
+    state: absent
+
+# 저장소 사전 준비 패키지 설치 (lsb-release 제외: 코드네임은 facts 에서 가져옴)
+- name: Docker 저장소 사전 패키지 설치
+  ansible.builtin.apt:
+    name: "{{ docker_prereq_packages }}"
     state: present
-    update_cache: yes
+    update_cache: true
+    cache_valid_time: 3600
 
-# Docker GPG key 추가
-- name: Add Docker GPG key
-  apt_key:
-    url: https://download.docker.com/linux/ubuntu/gpg
-    state: present
-
-# Docker repository 추가
-- name: Add Docker repository
-  apt_repository:
-    repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
-    state: present
-    update_cache: yes
-
-# Docker 엔진 설치
-- name: Install Docker Engine
-  apt:
-    name:
-      - docker-ce
-      - docker-ce-cli
-      - containerd.io
-    state: present
-    update_cache: yes
-
-# Docker 서비스 시작 및 활성화
-- name: Start and enable Docker service
-  service:
-    name: docker
-    state: started
-    enabled: yes
-
-# Docker Compose 설치
-- name: Install Docker Compose
-  get_url:
-    url: https://github.com/docker/compose/releases/download/v2.23.3/docker-compose-linux-x86_64
-    dest: /usr/local/bin/docker-compose
+# GPG 키 디렉토리 생성 (멱등)
+- name: keyrings 디렉토리 생성
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
     mode: '0755'
 
-# Docker 버전 확인
-- name: Check Docker version
-  command: docker --version
-  register: docker_version
-  changed_when: false
+# Docker 공식 GPG 키 다운로드 (force 미사용 → dest 존재 시 재다운로드 안 함, 멱등)
+# OS 경로는 facts 로 결정: ubuntu → linux/ubuntu, debian → linux/debian
+- name: Docker GPG 키 다운로드
+  ansible.builtin.get_url:
+    url: "https://download.docker.com/linux/{{ docker_apt_os }}/gpg"
+    dest: /etc/apt/keyrings/docker.asc
+    owner: root
+    group: root
+    mode: '0644'
 
-# Docker Compose 버전 확인
-- name: Check Docker Compose version
-  command: docker-compose --version
+# Docker apt 저장소 추가 (deb822 구조화 포맷 → 바이트 안정적, 멱등)
+# arch / OS 경로 / 코드네임 모두 facts 기반 → Ubuntu/Debian, amd64/arm64 모두 정확
+- name: Docker apt 저장소 추가 (deb822)
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: [deb]
+    uris: "https://download.docker.com/linux/{{ docker_apt_os }}"
+    suites: ["{{ docker_apt_release }}"]
+    components: [stable]
+    architectures: ["{{ docker_apt_arch }}"]
+    signed_by: /etc/apt/keyrings/docker.asc
+    state: present
+    enabled: true
+  register: docker_repo_added
+
+# deb822_repository 가 저장소를 새로 추가/변경했을 때만 apt 캐시 갱신 (멱등)
+- name: Docker 저장소 변경 시 apt 캐시 갱신
+  ansible.builtin.apt:
+    update_cache: true
+  when: docker_repo_added is changed
+
+# Docker 패키지 설치
+# 기본 state: present (비결정적 업그레이드 방지). docker_version 지정 시 버전 고정.
+- name: Docker 패키지 설치
+  ansible.builtin.apt:
+    name: >-
+      {{ docker_packages
+         if (docker_version | length == 0)
+         else ['docker-ce=' ~ docker_version,
+               'docker-ce-cli=' ~ docker_version,
+               'containerd.io',
+               'docker-buildx-plugin',
+               'docker-compose-plugin'] }}
+    state: present
+
+# Docker 서비스 시작/활성화 (비특권 컨테이너 테스트에서는 docker_manage_service=false 로 스킵)
+- name: Docker 서비스 시작 및 활성화
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+  when: docker_manage_service | bool
+
+- name: containerd 서비스 시작 및 활성화
+  ansible.builtin.service:
+    name: containerd
+    state: started
+    enabled: true
+  when: docker_manage_service | bool
+
+# 사용자를 docker 그룹에 추가 (group_vars 의 docker_user 사용)
+# 주의: 그룹 변경은 현재 SSH 세션에 즉시 반영되지 않으며 재로그인이 필요하다.
+#       아래 검증은 become(root) 로 실행되므로 그룹 반영 여부와 무관하게 동작한다.
+- name: 사용자를 docker 그룹에 추가
+  ansible.builtin.user:
+    name: "{{ docker_user }}"
+    groups: docker
+    append: true
+
+# --- 검증 (멱등: 모두 changed_when:false) ---
+
+# 클라이언트 버전 확인은 데몬이 없어도 동작 (docker --version, 클라이언트 전용)
+# 항상 수행 가능 → docker_in_docker 가 아닌 테스트 컨테이너에서도 안전
+- name: Docker 클라이언트 버전 확인
+  ansible.builtin.command: docker --version
+  register: docker_client_version
+  changed_when: false
+  check_mode: false
+
+- name: Compose 플러그인 버전 확인
+  ansible.builtin.command: docker compose version --short
   register: docker_compose_version
   changed_when: false
+  check_mode: false
 
-# 버전 정보 출력
-- name: Display Docker version
-  debug:
-    msg: "{{ docker_version.stdout }}"
+- name: 설치된 버전 출력
+  ansible.builtin.debug:
+    msg:
+      - "Docker Client: {{ docker_client_version.stdout }}"
+      - "Docker Compose: {{ docker_compose_version.stdout }}"
 
-- name: Display Docker Compose version
-  debug:
-    msg: "{{ docker_compose_version.stdout }}"
+# 데몬 검증(서버 버전 + hello-world) 은 docker_verify=true 일 때만 수행.
+# docker-in-docker 는 systemd + --privileged 가 필요하므로 일반 테스트에서는 비활성.
+# failed_when:false 로 실패해도 플레이를 중단시키지 않음.
+- name: Docker 데몬(서버) 버전 확인
+  ansible.builtin.command: docker version --format '{{ '{{' }}.Server.Version{{ '}}' }}'
+  register: docker_server_version
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: docker_verify | bool
 
-# 현재 사용자를 docker 그룹에 추가
-- name: Add user to docker group
-  user:
-    name: ubuntu
-    groups: docker
-    append: yes
+- name: Docker 설치 검증 (hello-world)
+  ansible.builtin.command: docker run --rm hello-world
+  register: docker_hello
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: docker_verify | bool
+
+- name: Docker 데몬 검증 결과 출력
+  ansible.builtin.debug:
+    msg: >-
+      Docker 데몬 검증:
+      {{ 'SUCCESS' if (docker_hello.rc | default(1)) == 0
+         else 'FAILED - 데몬 미기동/재로그인 필요 (docker-in-docker 는 --privileged + systemd 필요)' }}
+  when: docker_verify | bool

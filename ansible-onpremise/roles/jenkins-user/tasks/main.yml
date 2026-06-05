@@ -1,62 +1,84 @@
 ---
-# jenkins-user/tasks/main.yml
+# jenkins-user 역할: CI/CD 배포용 jenkins 계정 구성 (네이티브 모듈, 멱등)
+# 기본 비활성: enable_jenkins=true 일 때만 실행. raw idiom 전면 제거.
 
-# jenkins 그룹의 존재 여부를 확인합니다
-# raw 모듈은 결과를 다른 형식으로 반환하므로 접근 방식이 다릅니다
-- name: Check if jenkins group exists
-  raw: getent group jenkins || echo "Group does not exist"
-  register: group_check
+- name: jenkins 그룹 생성
+  ansible.builtin.group:
+    name: "{{ jenkins_group }}"
+    gid: "{{ jenkins_gid }}"
+    state: present
+
+- name: jenkins 사용자 생성
+  ansible.builtin.user:
+    name: "{{ jenkins_user }}"
+    uid: "{{ jenkins_uid }}"
+    group: "{{ jenkins_group }}"
+    shell: "{{ jenkins_shell }}"
+    home: "{{ jenkins_home }}"
+    comment: "{{ jenkins_comment }}"
+    create_home: true
+    state: present
+
+- name: docker 그룹 존재 확인
+  ansible.builtin.getent:
+    database: group
+    key: docker
+  register: jenkins_docker_group
+  failed_when: false
   changed_when: false
+  when: jenkins_add_to_docker | bool
 
-# jenkins 그룹이 존재하지 않을 경우에만 그룹을 생성합니다
-# "is defined" 조건을 추가하여 변수가 존재하는지 확인
-- name: Create jenkins group
-  raw: groupadd -g 900 jenkins
-  when: group_check is defined and 'Group does not exist' in (group_check.stdout | default(''))
+- name: jenkins 사용자를 docker 그룹에 추가 (그룹 존재 시)
+  ansible.builtin.user:
+    name: "{{ jenkins_user }}"
+    groups: docker
+    append: true
+  when:
+    - jenkins_add_to_docker | bool
+    - jenkins_docker_group.ansible_facts.getent_group is defined
+    - "'docker' in jenkins_docker_group.ansible_facts.getent_group"
 
-# jenkins 사용자의 존재 여부를 확인합니다
-- name: Check if jenkins user exists  
-  raw: id jenkins || echo "User does not exist"
-  register: user_check
-  changed_when: false
+- name: jenkins .ssh 디렉토리 생성 (0700)
+  ansible.builtin.file:
+    path: "{{ jenkins_home }}/.ssh"
+    state: directory
+    owner: "{{ jenkins_user }}"
+    group: "{{ jenkins_group }}"
+    mode: "{{ jenkins_ssh_dir_mode }}"
+  when: jenkins_create_ssh_dir | bool
 
-# jenkins 사용자가 존재하지 않을 경우에만 사용자를 생성합니다
-- name: Create jenkins user
-  raw: useradd -u 900 -g jenkins -m -s /bin/bash -c "Jenkins Deployment User" jenkins
-  when: user_check is defined and 'User does not exist' in (user_check.stdout | default(''))
+- name: jenkins authorized_keys 생성 (0644, 정책 준수)
+  ansible.builtin.file:
+    path: "{{ jenkins_home }}/.ssh/authorized_keys"
+    state: touch
+    owner: "{{ jenkins_user }}"
+    group: "{{ jenkins_group }}"
+    mode: '0644'
+    access_time: preserve
+    modification_time: preserve
+  when: jenkins_create_ssh_dir | bool
 
-# jenkins 사용자가 실제로 생성되었는지 확인합니다
-- name: Verify jenkins user was created
-  raw: id jenkins
-  register: verify_user
-  failed_when: verify_user is defined and verify_user.rc is defined and verify_user.rc != 0
+- name: jenkins sudoers 설정 (visudo 검증)
+  ansible.builtin.template:
+    src: jenkins-sudoers.j2
+    dest: /etc/sudoers.d/jenkins
+    owner: root
+    group: root
+    mode: '0440'
+    validate: 'visudo -cf %s'
+  when: jenkins_sudo_access | bool
 
-# jenkins 사용자의 SSH 디렉토리를 생성하고 권한을 설정합니다
-- name: Create .ssh directory for jenkins
-  raw: mkdir -p /home/jenkins/.ssh && chown jenkins:jenkins /home/jenkins/.ssh && chmod 700 /home/jenkins/.ssh
-
-# authorized_keys 파일 생성 및 권한 설정
-- name: Set up authorized_keys file
-  raw: touch /home/jenkins/.ssh/authorized_keys && chown jenkins:jenkins /home/jenkins/.ssh/authorized_keys && chmod 600 /home/jenkins/.ssh/authorized_keys
-
-# jenkins 사용자에게 비밀번호 없이 sudo 권한을 부여합니다
-- name: Set up sudoers for jenkins
-  raw: echo "jenkins ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/jenkins && chmod 440 /etc/sudoers.d/jenkins
-
-# Docker 그룹이 있을 경우 jenkins 사용자를 Docker 그룹에 추가
-- name: Add jenkins to docker group if exists
-  raw: getent group docker && usermod -aG docker jenkins || echo "Docker group not found"
-  ignore_errors: yes
-
-# SSH 클라이언트 설정 추가 (호스트 키 확인 비활성화)
-- name: Configure SSH client settings
-  raw: |
-    mkdir -p /home/jenkins/.ssh/config.d
-    cat > /home/jenkins/.ssh/config << 'EOF'
-    Host *
-      StrictHostKeyChecking no
-      UserKnownHostsFile /dev/null
-      ServerAliveInterval 60
-    EOF
-    chown -R jenkins:jenkins /home/jenkins/.ssh
-    chmod 600 /home/jenkins/.ssh/config
+- name: jenkins SSH 클라이언트 설정 (호스트 키 검사 비활성, 옵트인)
+  ansible.builtin.copy:
+    dest: "{{ jenkins_home }}/.ssh/config"
+    owner: "{{ jenkins_user }}"
+    group: "{{ jenkins_group }}"
+    mode: '0600'
+    content: |
+      Host *
+        StrictHostKeyChecking no
+        UserKnownHostsFile /dev/null
+        ServerAliveInterval 60
+  when:
+    - jenkins_configure_ssh_client | bool
+    - jenkins_disable_host_key_checking | bool

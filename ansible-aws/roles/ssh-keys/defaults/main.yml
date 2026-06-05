@@ -1,0 +1,8 @@
+---
+# ssh-keys 역할 기본값 (AWS)
+# 역할은 기본 비활성: playbook 에서 manage_ssh_keys=true 또는 태그로 명시 실행.
+manage_ssh_keys: false
+
+# 키 종류 / 코멘트 (코멘트는 호스트명을 넣지 않아 재실행/호스트 변경 시 churn 방지)
+ssh_key_type: ed25519
+ssh_key_comment: "{{ ansible_user }}"

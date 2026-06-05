@@ -1,0 +1,60 @@
+---
+# docker 역할 기본값
+# 환경별 차이는 group_vars 에서 덮어쓴다 (예: docker_user, docker_verify).
+
+# Docker 사용자: group_vars 의 docker_user 가 우선, 없으면 현재 접속 사용자
+docker_user: "{{ ansible_user }}"
+
+# APT 저장소 OS 경로: 'ubuntu' 또는 'debian' (facts 기반, 하드코딩 금지)
+# ansible_distribution 는 'Ubuntu' / 'Debian' → 소문자로 변환
+docker_apt_os: "{{ ansible_distribution | lower }}"
+
+# APT 아키텍처: dpkg 가 알려주는 실제 아키텍처 사용 (amd64 / arm64 등)
+# ansible_architecture(x86_64/aarch64) 매핑보다 dpkg 값이 apt 와 정확히 일치한다.
+# tasks 에서 'docker_dpkg_arch' 사실을 수집해 채운다. 폴백은 ansible_architecture 매핑.
+docker_apt_arch: >-
+  {{ docker_dpkg_arch
+     | default(ansible_architecture | default('amd64')
+               | replace('x86_64', 'amd64')
+               | replace('aarch64', 'arm64')) }}
+
+# 저장소 코드네임: facts 기반 (jammy/noble/bullseye/bookworm 등)
+docker_apt_release: "{{ ansible_distribution_release }}"
+
+# 설치할 Docker 패키지 목록
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+# 설치 전 제거할 '구버전/충돌' 패키지만 지정.
+# 이 역할이 설치하는 docker-ce*/containerd.io 는 포함하지 않는다 (재실행 churn 방지).
+docker_conflicting_packages:
+  - docker
+  - docker-engine
+  - docker.io
+  - containerd
+  - runc
+
+# Docker 저장소 사전 준비 패키지 (lsb-release 제거: 코드네임은 facts 에서 가져옴)
+# python3-debian: deb822_repository 모듈이 의존하는 라이브러리 (Ubuntu/Debian 공통)
+docker_prereq_packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - python3-debian
+
+# 버전 고정 (선택). 비워두면 state: present 로 현재 최신 사용 가능 버전을 1회만 설치.
+# 예: docker_version: "5:27.3.1-1~ubuntu.24.04~noble"
+docker_version: ""
+
+# 데몬이 필요한 검증(docker version --server, docker run hello-world) 수행 여부.
+# 기본 false: docker-in-docker(systemd + --privileged) 가 아닌 컨테이너 테스트에서
+# 데몬이 없어 실패하는 것을 막는다. 실서버/특권 컨테이너에서만 true 로 켠다.
+docker_verify: false
+
+# Docker 서비스 시작/활성화 여부.
+# 비특권 컨테이너(데몬 기동 불가) 테스트에서는 false 로 끌 수 있다.
+docker_manage_service: true

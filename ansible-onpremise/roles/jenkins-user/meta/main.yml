@@ -2,10 +2,10 @@
 ---
 galaxy_info:
   role_name: jenkins_user
-  author: Your Name
+  author: puzzle-ai infra
   description: Role to create and configure jenkins user for CI/CD deployment
   license: MIT
-  min_ansible_version: 2.9
+  min_ansible_version: "2.14"
   platforms:
     - name: Ubuntu
       versions:
@@ -13,10 +13,6 @@ galaxy_info:
     - name: Debian
       versions:
         - all
-    - name: EL
-      versions:
-        - 7
-        - 8
   galaxy_tags:
     - jenkins
     - deployment
