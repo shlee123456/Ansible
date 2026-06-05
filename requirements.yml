@@ -1,0 +1,12 @@
+---
+# Ansible Galaxy 컬렉션 (프로덕션 역할 의존성)
+# 설치: ansible-galaxy collection install -r requirements.yml
+#
+# - community.general : common 역할의 locale_gen / timezone 모듈
+# - community.crypto  : ssh-keys 역할(옵트인)의 openssh_keypair 모듈
+#   (community.docker 는 테스트 하니스 전용 → test/requirements.yml)
+collections:
+  - name: community.general
+    version: ">=7.0.0"
+  - name: community.crypto
+    version: ">=2.0.0"

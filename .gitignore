@@ -3,3 +3,13 @@
 
 # IDE settings
 .claude_settings.json
+
+# macOS metadata
+.DS_Store
+**/.DS_Store
+
+# Ansible / Python cruft
+*.retry
+*.log
+__pycache__/
+*.pyc

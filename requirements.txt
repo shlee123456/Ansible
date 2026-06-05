@@ -1,0 +1,16 @@
+# Ansible Infrastructure Automation - Python 의존성
+#
+# 설치: pip install -r requirements.txt
+
+# Ansible 코어 (deb822_repository / community.general 을 위해 2.16+ 필요)
+ansible-core>=2.16
+# Galaxy 컬렉션은 requirements.yml 참조: ansible-galaxy collection install -r requirements.yml
+
+# Ansible에서 사용하는 JSON 쿼리 라이브러리
+jmespath>=1.0
+
+# YAML 파싱 (Ansible 내장, 명시적 선언)
+PyYAML>=6.0
+
+# SSH 연결 관련 (선택)
+paramiko>=3.0
