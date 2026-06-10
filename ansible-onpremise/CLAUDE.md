@@ -13,7 +13,15 @@ Ubuntu 기반 온프레미스 서버의 인프라 자동화 구성
 |--------|-----|------|
 | work-node1 | 192.168.45.54 | 사무실 mini-pc |
 | test-node1 | 192.168.45.231 | 테스트 서버 |
-| work-node2 | 192.168.45.114 | 신규 서버 (Ubuntu 24.04) |
+| work-node2 | 192.168.45.114 | LLM 서빙 서버 (Ubuntu 24.04, RTX PRO 6000 Blackwell x2) |
+
+### 서버 그룹
+
+| 그룹 | 호스트 | 용도 |
+|------|--------|------|
+| servers | 전체 | 공통 기반 (bootstrap, common, docker, nvidia) |
+| llm | work-node2 | LLM 모델 다운로드·서빙 (단일 3.5TB LVM, /media/llm-models 표준 경로) |
+| stt | (입고 예정) | 음성인식 서버·서비스 (docker compose) |
 
 ## 인증 방식
 
@@ -118,6 +126,10 @@ playbook 은 `gather_facts: no` 로 시작하고 공유 `bootstrap` 역할을 **
 | common | 활성 | 기본 패키지, 한글 로케일, 시간대 설정 (네이티브·멱등) |
 | docker | 활성 | Docker CE, Compose Plugin 설치 |
 | nvidia | 활성 | NVIDIA 드라이버 + Container Toolkit (GPU 자동 감지, 미감지 시 스킵) |
+| llm | 활성 | HF 모델 다운로드 환경(venv)·모델 동기화 (llm 그룹 전용, 토큰은 vault) |
+| git-credentials | 활성 | GitHub HTTPS 자격증명 배포 (puzzle 계정용, 토큰은 vault) |
+| dev-user | 활성 | 개인 작업 계정(shlee) 생성 + 공유 git 배포 키 설치 → 초기 세팅 후 즉시 SSH clone 가능 |
+| stt | 골격 | 음성인식 서버·서비스 (서버 입고·소스 확정 후 구체화) |
 | ssh-keys | 옵트인 | Ed25519 키 쌍 생성 (`-e manage_ssh_keys=true` 또는 `-t ssh-keys`) |
 | jenkins-user | 옵트인 | Jenkins 배포 사용자 설정 (`-e enable_jenkins=true`) |
 
