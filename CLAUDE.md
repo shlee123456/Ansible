@@ -52,7 +52,7 @@ ansible/
 ├── CLAUDE.md                   # 루트: 전역 규칙
 ├── Makefile                    # 편의 명령어 (make help)
 ├── requirements.txt            # Python 의존성
-├── .python-version             # pyenv 가상환경 (ansible)
+├── .python-version             # pyenv 가상환경 (ansible-onpremise)
 ├── .context/                   # 맥락 관리 (gitignore 대상)
 │   ├── history/                # 세션 히스토리
 │   └── terminal/               # 터미널 로그
@@ -93,7 +93,7 @@ ansible/
 - 역할/태스크 설명은 `name` 필드에 명시
 
 ### Ansible 규칙
-- 공통 변수: `group_vars/all.yml`
+- 공통 변수: `group_vars/all/main.yml` (비밀값은 `group_vars/all/vault.yml` 에 Vault 암호화)
 - 역할별 기본값: `roles/[role]/defaults/main.yml`
 - 멱등성 보장: `changed_when`, `when` 조건 활용
 - 사용자 변수화: `{{ ansible_user }}` 사용 (하드코딩 금지)
@@ -123,8 +123,8 @@ eval "$(pyenv virtualenv-init -)"
 ./scripts/setup-env.sh
 
 # 또는 수동 설정
-pyenv virtualenv 3.11 ansible
-pyenv local ansible
+pyenv virtualenv 3.11 ansible-onpremise
+pyenv local ansible-onpremise
 pip install -r requirements.txt
 ```
 

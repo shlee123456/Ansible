@@ -19,7 +19,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 PYTHON_VERSION="3.11"
-VENV_NAME="ansible"
+VENV_NAME="ansible-onpremise"
 
 echo -e "${CYAN}=== Ansible 개발환경 설정 ===${NC}"
 echo ""

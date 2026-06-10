@@ -13,12 +13,35 @@ Ubuntu 기반 온프레미스 서버의 인프라 자동화 구성
 |--------|-----|------|
 | work-node1 | 192.168.45.54 | 사무실 mini-pc |
 | test-node1 | 192.168.45.231 | 테스트 서버 |
+| work-node2 | 192.168.45.114 | 신규 서버 (Ubuntu 24.04) |
 
 ## 인증 방식
 
 - **SSH 인증**: 비밀번호 기반 (`-k` 옵션)
 - **Sudo 인증**: 비밀번호 기반 (`-K` 옵션)
 - **사용자**: puzzle
+
+### 비대화식 실행 (검증된 패턴 — 매번 재확인 불필요)
+
+**Ansible Vault 가 기본 경로다.** 접속/승격 비밀번호는 `group_vars/all/vault.yml`(암호화, 커밋 가능)의
+`vault_ansible_password` 에 있고, `group_vars/all/main.yml` 이 `ansible_password`/`ansible_become_pass` 로 참조한다.
+복호화 키는 `.vault_pass`(gitignore, 0600) — `ansible.cfg` 의 `vault_password_file` 이 자동 사용한다.
+
+```bash
+# 프롬프트 없이 바로 실행 (.vault_pass 가 있으면 끝)
+./start.sh -l work-node2
+ansible-playbook -i inventory/hosts playbook.yml      # 직접 실행도 동일
+
+# vault 값 수정
+ansible-vault edit group_vars/all/vault.yml
+```
+
+- `.vault_pass` 가 없는 새 머신: 기존 머신에서 `.vault_pass` 파일만 복사 (또는 `--ask-vault-pass`)
+- `start.sh` 인증 우선순위: `SSHPASS` 환경변수(임시 덮어쓰기) → `.vault_pass` → `--ask-vault-pass` 프롬프트
+- 실행은 **ansible-onpremise 디렉토리에서** (vault_password_file 이 상대경로)
+- 실행기 경로(셸 PATH 에 shim 없을 때): `$HOME/.pyenv/versions/ansible-onpremise/bin/ansible-playbook`
+- venv 이름은 **`ansible-onpremise`** (문서 예시의 `ansible` 아님)
+- `--check` 드라이런은 docker/nvidia 역할에서 실패가 정상 (저장소 추가 전 패키지 조회 한계)
 
 ## 디렉토리 구조
 
@@ -30,7 +53,8 @@ ansible-onpremise/
 ├── start.sh             # 실행 스크립트 (옵션 지원)
 ├── SETUP.md             # 상세 개발환경 가이드
 ├── inventory/hosts      # 호스트 목록
-├── group_vars/all.yml   # 공통 변수
+├── group_vars/all/      # 공통 변수 (main.yml) + 암호화 비밀변수 (vault.yml)
+├── .vault_pass          # Vault 복호화 키 (gitignore, 커밋 금지)
 └── roles/
     ├── common/          # 기본 시스템 설정 (네이티브 모듈, 멱등)
     ├── docker/          # Docker CE, Compose 설치
@@ -93,6 +117,7 @@ playbook 은 `gather_facts: no` 로 시작하고 공유 `bootstrap` 역할을 **
 | bootstrap | 활성 | (공유) python3/python3-apt 설치 + facts 수집 |
 | common | 활성 | 기본 패키지, 한글 로케일, 시간대 설정 (네이티브·멱등) |
 | docker | 활성 | Docker CE, Compose Plugin 설치 |
+| nvidia | 활성 | NVIDIA 드라이버 + Container Toolkit (GPU 자동 감지, 미감지 시 스킵) |
 | ssh-keys | 옵트인 | Ed25519 키 쌍 생성 (`-e manage_ssh_keys=true` 또는 `-t ssh-keys`) |
 | jenkins-user | 옵트인 | Jenkins 배포 사용자 설정 (`-e enable_jenkins=true`) |
 
