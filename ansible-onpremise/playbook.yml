@@ -10,6 +10,8 @@
     # 2) 이후는 네이티브 모듈 역할
     - common
     - docker
+    # NVIDIA 드라이버 + Container Toolkit (GPU 미감지 호스트는 자동 스킵)
+    - { role: nvidia, tags: [nvidia] }
     # ssh-keys / jenkins-user 는 옵트인 (태그 또는 -e 변수로 실행)
     - { role: ssh-keys, tags: [ssh-keys] }
     - { role: jenkins-user, tags: [jenkins], when: enable_jenkins | default(false) }

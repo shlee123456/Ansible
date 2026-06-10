@@ -1,0 +1,8 @@
+---
+# nvidia 역할 핸들러
+
+# nvidia-ctk 가 daemon.json 을 변경했을 때만 notify 되어 실행된다
+- name: docker 재시작 (NVIDIA 런타임 반영)
+  ansible.builtin.service:
+    name: docker
+    state: restarted

@@ -1,0 +1,170 @@
+---
+# nvidia 역할: NVIDIA 드라이버 + Container Toolkit 설치 (LLM/GPU 서버용)
+# 참고: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+# 전제: 부트스트랩 완료(python3). docker 런타임 등록은 docker 역할 선행 필요.
+# GPU 가 없는 호스트에서는 감지 단계에서 전체 스킵 → 모든 호스트에 안전하게 적용 가능.
+# 2회차 실행 시 changed=0 (state: present, get_url force 미사용, grep 가드).
+
+# 사전 패키지 설치 (lspci 감지용 pciutils 포함)
+- name: NVIDIA 사전 패키지 설치
+  ansible.builtin.apt:
+    name: "{{ nvidia_prereq_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+# NVIDIA GPU 감지: 없으면 이후 태스크 전체 스킵 (GPU 없는 노드 안전)
+- name: NVIDIA GPU 감지 (lspci)
+  ansible.builtin.shell: lspci | grep -i nvidia
+  register: nvidia_lspci
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: GPU 감지 결과 사실 설정
+  ansible.builtin.set_fact:
+    nvidia_gpu_present: "{{ nvidia_lspci.rc == 0 }}"
+
+- name: GPU 미감지 시 안내
+  ansible.builtin.debug:
+    msg: "NVIDIA GPU 미감지 → nvidia 역할 스킵"
+  when: not nvidia_gpu_present
+
+- name: NVIDIA 드라이버 및 Container Toolkit 설치
+  when: nvidia_gpu_present
+  block:
+    # APT 아키텍처 확정 (docker 역할과 동일 패턴, facts 불필요)
+    - name: APT 아키텍처 확인 (dpkg)
+      ansible.builtin.command: dpkg --print-architecture
+      register: nvidia_dpkg_arch_result
+      changed_when: false
+      check_mode: false
+
+    - name: APT 아키텍처 사실 설정
+      ansible.builtin.set_fact:
+        nvidia_dpkg_arch: "{{ nvidia_dpkg_arch_result.stdout | trim }}"
+
+    # --- 드라이버 ---
+
+    # Ubuntu 공식 저장소(restricted)의 서버용 open 커널 모듈 드라이버 설치
+    - name: NVIDIA 드라이버 설치
+      ansible.builtin.apt:
+        name: "{{ nvidia_driver_package }}"
+        state: present
+
+    # --- Container Toolkit 저장소 ---
+
+    - name: keyrings 디렉토리 생성
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    # GPG 키 다운로드 (force 미사용 → dest 존재 시 재다운로드 안 함, 멱등)
+    - name: NVIDIA Container Toolkit GPG 키 다운로드
+      ansible.builtin.get_url:
+        url: https://nvidia.github.io/libnvidia-container/gpgkey
+        dest: /etc/apt/keyrings/nvidia-container-toolkit.asc
+        owner: root
+        group: root
+        mode: '0644'
+
+    # flat repo: suites 가 '/' 이고 components 없음 (아키텍처는 URI 경로에 포함)
+    - name: NVIDIA Container Toolkit apt 저장소 추가 (deb822)
+      ansible.builtin.deb822_repository:
+        name: nvidia-container-toolkit
+        types: [deb]
+        uris: "https://nvidia.github.io/libnvidia-container/stable/deb/{{ nvidia_apt_arch }}"
+        suites: ["/"]
+        signed_by: /etc/apt/keyrings/nvidia-container-toolkit.asc
+        state: present
+        enabled: true
+      register: nvidia_repo_added
+
+    - name: NVIDIA 저장소 변경 시 apt 캐시 갱신
+      ansible.builtin.apt:
+        update_cache: true
+      when: nvidia_repo_added is changed
+
+    - name: NVIDIA Container Toolkit 설치
+      ansible.builtin.apt:
+        name: "{{ nvidia_toolkit_packages }}"
+        state: present
+
+    # --- Docker 런타임 등록 (docker 역할 선행 필요) ---
+
+    # daemon.json 에 nvidia 런타임이 이미 등록돼 있으면 스킵 → 멱등
+    - name: daemon.json 의 nvidia 런타임 등록 여부 확인
+      ansible.builtin.command: grep -q '"nvidia"' /etc/docker/daemon.json
+      register: nvidia_runtime_configured
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      when: nvidia_configure_docker | bool
+
+    - name: Docker 런타임에 NVIDIA 등록 (nvidia-ctk)
+      ansible.builtin.command: nvidia-ctk runtime configure --runtime=docker
+      when:
+        - nvidia_configure_docker | bool
+        - nvidia_runtime_configured.rc != 0
+      notify: docker 재시작 (NVIDIA 런타임 반영)
+
+    # --- 드라이버 로드 확인 / 재부팅 ---
+
+    # 드라이버 설치 직후에는 커널 모듈 미로드로 실패할 수 있다 (재부팅 필요)
+    - name: 드라이버 로드 확인 (nvidia-smi)
+      ansible.builtin.command: nvidia-smi -L
+      register: nvidia_smi_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    # 커널 모듈 미로드 + 옵트인 시에만 재부팅 (-e nvidia_allow_reboot=true)
+    - name: 재부팅 (드라이버 커널 모듈 로드, 옵트인)
+      ansible.builtin.reboot:
+        reboot_timeout: 600
+        msg: "Ansible: NVIDIA 드라이버 적용을 위한 재부팅"
+      when:
+        - nvidia_smi_check.rc != 0
+        - nvidia_allow_reboot | bool
+      register: nvidia_rebooted
+
+    - name: 재부팅 후 드라이버 재확인 (nvidia-smi)
+      ansible.builtin.command: nvidia-smi -L
+      register: nvidia_smi_recheck
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      when: nvidia_rebooted is changed
+
+    - name: 드라이버 상태 출력
+      ansible.builtin.debug:
+        msg: >-
+          {{ (nvidia_smi_recheck.stdout_lines | default(nvidia_smi_check.stdout_lines))
+             if (nvidia_smi_recheck.rc | default(nvidia_smi_check.rc)) == 0
+             else 'NVIDIA 드라이버 설치됨 - 커널 모듈 미로드. 재부팅 필요 (-e nvidia_allow_reboot=true)' }}
+
+    # --- GPU 컨테이너 검증 (옵트인: -e nvidia_verify=true) ---
+
+    # 등록 직후 검증을 위해 대기 중인 docker 재시작 핸들러를 먼저 비운다
+    - name: 핸들러 즉시 실행 (docker 재시작 반영)
+      ansible.builtin.meta: flush_handlers
+
+    - name: GPU 컨테이너 검증 (docker run --gpus all)
+      ansible.builtin.command: docker run --rm --gpus all ubuntu:24.04 nvidia-smi -L
+      register: nvidia_container_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      when: nvidia_verify | bool
+
+    - name: GPU 컨테이너 검증 결과 출력
+      ansible.builtin.debug:
+        msg: >-
+          GPU 컨테이너 검증:
+          {{ 'SUCCESS - ' ~ (nvidia_container_check.stdout_lines | join(' / '))
+             if (nvidia_container_check.rc | default(1)) == 0
+             else 'FAILED - 드라이버 미로드(재부팅 필요) 또는 docker 데몬 확인 필요' }}
+      when: nvidia_verify | bool

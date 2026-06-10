@@ -1,0 +1,37 @@
+---
+# nvidia 역할 기본값
+# 환경별 차이는 group_vars 또는 -e 변수로 덮어쓴다.
+
+# NVIDIA 드라이버 패키지 (Ubuntu 24.04 noble 저장소 기준)
+# RTX 6000(Ada/Blackwell)은 open 커널 모듈 권장이며, Blackwell 세대는 open 이 필수.
+# 580 = 프로덕션(서버) 브랜치. 저장소에 590/595 도 있으니 필요 시 덮어쓴다.
+nvidia_driver_package: nvidia-driver-580-server-open
+
+# NVIDIA Container Toolkit 패키지
+nvidia_toolkit_packages:
+  - nvidia-container-toolkit
+
+# 저장소 사전 준비 패키지 (역할 단독 실행에도 자급자족하도록 docker 역할과 중복 허용)
+# python3-debian: deb822_repository 모듈 의존성, pciutils: GPU 감지(lspci)용
+nvidia_prereq_packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - python3-debian
+  - pciutils
+
+# APT 아키텍처: tasks 에서 dpkg 로 수집 (facts 불필요 → -t nvidia 단독 실행 안전)
+# Container Toolkit 저장소는 flat repo 라 경로에 아키텍처가 들어간다.
+nvidia_apt_arch: "{{ nvidia_dpkg_arch | default('amd64') }}"
+
+# Docker 런타임에 NVIDIA 등록(nvidia-ctk runtime configure) 여부.
+# docker 역할이 선행돼야 한다. 변경 시 docker 서비스를 재시작한다.
+nvidia_configure_docker: true
+
+# 드라이버 설치 후 nvidia-smi 가 실패하면(커널 모듈 미로드) 재부팅 수행 여부.
+# 기본 false: 재부팅은 운영 영향이 크므로 -e nvidia_allow_reboot=true 로 옵트인.
+nvidia_allow_reboot: false
+
+# GPU 컨테이너 검증(docker run --gpus all ... nvidia-smi) 수행 여부.
+# 드라이버 로드 + docker 데몬이 필요하므로 기본 false, 실서버에서 -e nvidia_verify=true.
+nvidia_verify: false
