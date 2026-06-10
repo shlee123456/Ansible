@@ -10,9 +10,12 @@
     key: "{{ ansible_user }}"
   when: manage_ssh_keys | bool
 
+# getent(실제 ansible_user 의 passwd 홈)를 우선한다. ansible_user_dir 은 become(root)
+# 환경에서 /root 가 되는데, 최신 systemd 의 tmpfiles provision.conf 가 /root/.ssh 를
+# root:root 로 강제(재소유)하므로 키를 /root 에 두면 소유권 핑퐁(비멱등)이 생긴다.
 - name: SSH 경로 사실 설정
   ansible.builtin.set_fact:
-    ssh_user_home: "{{ ansible_user_dir | default(getent_passwd[ansible_user][4]) }}"
+    ssh_user_home: "{{ getent_passwd[ansible_user][4] | default(ansible_user_dir) }}"
   when: manage_ssh_keys | bool
 
 - name: .ssh 디렉토리 생성 (0700)
