@@ -16,9 +16,8 @@
     - { role: git-credentials, tags: [git] }
     # 개인 작업 계정(shlee) + 공유 git 배포 키 (SSH clone 즉시 가능)
     - { role: dev-user, tags: [dev-user] }
-    # ssh-keys / jenkins-user 는 옵트인 (태그 또는 -e 변수로 실행)
+    # ssh-keys 는 옵트인 (태그 또는 -e 변수로 실행)
     - { role: ssh-keys, tags: [ssh-keys] }
-    - { role: jenkins-user, tags: [jenkins], when: enable_jenkins | default(false) }
 
 # LLM 서빙 서버 (llm 그룹): 모델 다운로드 환경 + 모델 동기화
 # facts 불필요 태스크로 구성 → -t llm 단독 실행 가능

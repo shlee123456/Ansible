@@ -1,6 +1,0 @@
-# jenkins-user/handlers/main.yml
----
-- name: restart ssh
-  ansible.builtin.service:
-    name: "{{ ssh_service_name | default('ssh') }}"
-    state: restarted
