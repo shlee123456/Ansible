@@ -15,7 +15,7 @@
     append: true
     create_home: true
 
-# docker 그룹은 docker 역할 이후에만 존재 → 있을 때만 추가 (jenkins-user 와 동일 패턴)
+# docker 그룹은 docker 역할 이후에만 존재 → 있을 때만 추가
 - name: docker 그룹 존재 확인
   ansible.builtin.command: getent group docker
   register: dev_docker_group

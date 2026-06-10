@@ -31,10 +31,8 @@ echo -e "필터: ${YELLOW}$FILTER${NC}"
 echo ""
 
 # 환경별 옵션 설정
-if [[ "$ENV" == "onpremise" ]]; then
-    DEFAULT_OPTS="-k"
-else
-    DEFAULT_OPTS=""
-fi
+# 온프레미스: Vault(.vault_pass + group_vars 의 ansible_password)가 인증을 처리하므로
+# 기본 옵션 없음. 필요 시 추가옵션으로 -k 전달 가능.
+DEFAULT_OPTS=""
 
 ansible -i inventory/hosts all -m setup -a "filter=$FILTER" $DEFAULT_OPTS "$@"

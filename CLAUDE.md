@@ -178,8 +178,8 @@ cd ansible-aws
 
 ### 로그 기록
 ```bash
-# 온프레미스
-ansible-playbook -i inventory/hosts playbook.yml -k -K -v 2>&1 | tee .context/terminal/onprem_$(date +%s).log
+# 온프레미스 (인증은 Vault 가 자동 처리 — ansible-onpremise/CLAUDE.md 참조)
+ansible-playbook -i inventory/hosts playbook.yml -v 2>&1 | tee .context/terminal/onprem_$(date +%s).log
 
 # AWS
 ansible-playbook -i inventory/hosts playbook.yml 2>&1 | tee .context/terminal/aws_$(date +%s).log

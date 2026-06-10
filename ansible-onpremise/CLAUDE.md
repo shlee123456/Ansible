@@ -25,9 +25,9 @@ Ubuntu 기반 온프레미스 서버의 인프라 자동화 구성
 
 ## 인증 방식
 
-- **SSH 인증**: 비밀번호 기반 (`-k` 옵션)
-- **Sudo 인증**: 비밀번호 기반 (`-K` 옵션)
-- **사용자**: puzzle
+- **기본**: Ansible Vault — `group_vars/all/vault.yml` 의 비밀번호를 `.vault_pass` 로 자동 복호화 (프롬프트 없음)
+- **비상용**: `-k`(SSH) / `-K`(sudo) 프롬프트 — vault 변수가 우선이므로 평소엔 불필요
+- **사용자**: puzzle (사내 공용) / 개인 작업·git clone 은 **shlee** 계정 (dev-user 역할이 생성)
 
 ### 비대화식 실행 (검증된 패턴 — 매번 재확인 불필요)
 
@@ -66,7 +66,11 @@ ansible-onpremise/
 └── roles/
     ├── common/          # 기본 시스템 설정 (네이티브 모듈, 멱등)
     ├── docker/          # Docker CE, Compose 설치
-    ├── jenkins-user/    # Jenkins 배포 사용자 (옵트인: enable_jenkins=true)
+    ├── nvidia/          # NVIDIA 드라이버 + Container Toolkit (GPU 자동 감지)
+    ├── llm/             # HF 모델 다운로드 (llm 그룹 전용, /media/llm-models)
+    ├── stt/             # 음성인식 서버 (골격 — 서버 입고 후 구체화)
+    ├── git-credentials/ # GitHub HTTPS 자격증명 (puzzle 계정)
+    ├── dev-user/        # 개인 계정(shlee) + 공유 git 배포 키 + 유틸 스크립트
     └── ssh-keys/        # SSH 키 관리 (옵트인: manage_ssh_keys=true)
 ```
 
@@ -131,7 +135,6 @@ playbook 은 `gather_facts: no` 로 시작하고 공유 `bootstrap` 역할을 **
 | dev-user | 활성 | 개인 작업 계정(shlee) 생성 + 공유 git 배포 키 설치 → 초기 세팅 후 즉시 SSH clone 가능 |
 | stt | 골격 | 음성인식 서버·서비스 (서버 입고·소스 확정 후 구체화) |
 | ssh-keys | 옵트인 | Ed25519 키 쌍 생성 (`-e manage_ssh_keys=true` 또는 `-t ssh-keys`) |
-| jenkins-user | 옵트인 | Jenkins 배포 사용자 설정 (`-e enable_jenkins=true`) |
 
 > **docker 역할 검증 변수**: `docker_verify`(데몬 hello-world 검증)와
 > `docker_manage_service`(서비스 시작)는 기본값이 안전하게 설정돼 있어 컨테이너
@@ -149,17 +152,23 @@ playbook 은 `gather_facts: no` 로 시작하고 공유 `bootstrap` 역할을 **
 ./start.sh -h           # 도움말
 ```
 
-### 직접 실행
+### 직접 실행 (인증은 Vault 자동)
 ```bash
 # 기본 실행
-ansible-playbook -i inventory/hosts playbook.yml -k -K -v
+ansible-playbook -i inventory/hosts playbook.yml -v
 
-# 특정 노드만 실행
-ansible-playbook -i inventory/hosts playbook.yml -l test-node1 -k -K -v
+# 특정 노드/태그만 실행
+ansible-playbook -i inventory/hosts playbook.yml -l work-node2 -t llm -v
 
-# 드라이런
-ansible-playbook -i inventory/hosts playbook.yml --check --diff -k -K
+# 드라이런 (docker/nvidia/llm 역할은 신규 저장소 한계로 실패가 정상)
+ansible-playbook -i inventory/hosts playbook.yml --check --diff
 ```
+
+### 신규 서버 온보딩 절차 (검증된 런북)
+1. `inventory/hosts` 에 호스트 추가 (GPU·LLM 서버면 `[llm]` 그룹에도 추가)
+2. 연결 확인: `../scripts/ping.sh onpremise` (또는 `ansible -i inventory/hosts <호스트> -m ping`)
+3. 적용: `./start.sh -l <호스트>` — 끝. (GPU 드라이버는 자동 감지, shlee 계정·git SSH clone 즉시 가능)
+4. 멱등성 확인: 한 번 더 실행해 `changed=0` 확인
 
 ### Makefile (루트 디렉토리에서)
 ```bash
