@@ -1,0 +1,45 @@
+---
+# git-credentials 역할: 서버 접속 계정에 GitHub HTTPS 자격증명 설정
+# 목적: 서버에서 회사 비공개 레포를 수동 git clone 할 때 토큰 입력 없이 동작.
+# 토큰은 vault(vault_git_token) 에 암호화 보관, 서버에는 ~/.git-credentials(0600) 로 배포.
+# 모든 태스크는 접속 사용자({{ ansible_user }}) 권한으로 수행 (become: false).
+
+- name: git 설치 확인
+  ansible.builtin.apt:
+    name: git
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+# credential.helper=store → git 이 ~/.git-credentials 를 자동 사용
+- name: git credential helper 설정 (store)
+  community.general.git_config:
+    name: credential.helper
+    value: store
+    scope: global
+  become: false
+
+# 토큰 포함 파일 — 내용이 로그에 남지 않도록 no_log
+- name: GitHub 자격증명 파일 배포 (~/.git-credentials, 0600)
+  ansible.builtin.copy:
+    content: "https://{{ git_username }}:{{ git_token }}@github.com\n"
+    dest: "~/.git-credentials"
+    mode: '0600'
+  become: false
+  no_log: true
+
+# 토큰 유효성 + 계정 일치 검증 (api.github.com/user)
+- name: GitHub 토큰 검증
+  ansible.builtin.uri:
+    url: https://api.github.com/user
+    headers:
+      Authorization: "token {{ git_token }}"
+  register: git_api_user
+  changed_when: false
+  check_mode: false
+  no_log: true
+  failed_when: git_api_user.status != 200 or git_api_user.json.login != git_username
+
+- name: 검증 결과 출력
+  ansible.builtin.debug:
+    msg: "GitHub 자격증명 OK — 계정 {{ git_username }}, 이제 https 비공개 레포 clone 시 토큰 입력 불필요"

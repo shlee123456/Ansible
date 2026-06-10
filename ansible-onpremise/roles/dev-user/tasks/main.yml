@@ -1,0 +1,101 @@
+---
+# dev-user 역할: 개인 작업 계정(shlee) 생성 + 공유 git 배포 키 설치
+# 목적: ansible 초기 세팅만으로 모든 서버에서 즉시 SSH 방식 git clone 가능.
+# - puzzle 은 사내 공용 계정 → 개인 작업/git 키는 dev_user 계정에 격리
+# - 계정 삭제(userdel -r)만으로 키까지 깔끔히 제거 가능
+# - 키는 공유 배포 키 (vault 암호화 파일) → GitHub 공개키 등록은 1회로 끝
+# 2회차 실행 시 changed=0.
+
+- name: 개인 계정 생성
+  ansible.builtin.user:
+    name: "{{ dev_user }}"
+    shell: "{{ dev_user_shell }}"
+    password: "{{ dev_user_password_hash }}"
+    groups: "{{ dev_user_groups }}"
+    append: true
+    create_home: true
+
+# docker 그룹은 docker 역할 이후에만 존재 → 있을 때만 추가 (jenkins-user 와 동일 패턴)
+- name: docker 그룹 존재 확인
+  ansible.builtin.command: getent group docker
+  register: dev_docker_group
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: docker 그룹에 추가 (그룹 존재 시)
+  ansible.builtin.user:
+    name: "{{ dev_user }}"
+    groups: docker
+    append: true
+  when: dev_docker_group.rc == 0
+
+- name: .ssh 디렉토리 생성 (0700)
+  ansible.builtin.file:
+    path: "/home/{{ dev_user }}/.ssh"
+    state: directory
+    owner: "{{ dev_user }}"
+    group: "{{ dev_user }}"
+    mode: '0700'
+
+# 공유 배포 키 설치 — src 가 vault 암호화 파일이라 copy 가 자동 복호화한다
+- name: git 배포 개인키 설치 (0600)
+  ansible.builtin.copy:
+    src: "{{ dev_git_key_src }}"
+    dest: "/home/{{ dev_user }}/.ssh/id_ed25519"
+    owner: "{{ dev_user }}"
+    group: "{{ dev_user }}"
+    mode: '0600'
+  no_log: true
+
+- name: git 배포 공개키 설치 (0644)
+  ansible.builtin.copy:
+    src: "{{ dev_git_key_src }}.pub"
+    dest: "/home/{{ dev_user }}/.ssh/id_ed25519.pub"
+    owner: "{{ dev_user }}"
+    group: "{{ dev_user }}"
+    mode: '0644'
+
+# 개인 유틸리티 스크립트 배포 (원본: shlee-Source/script — 원본 유실 대비 역할 files 로 관리)
+- name: Claude Code 설치 스크립트 배포 (0755)
+  ansible.builtin.copy:
+    src: install-claude-code.sh
+    dest: "/home/{{ dev_user }}/install-claude-code.sh"
+    owner: "{{ dev_user }}"
+    group: "{{ dev_user }}"
+    mode: '0755'
+
+# github.com 호스트 키 사전 등록 → 최초 clone 시 yes/no 프롬프트 없음
+- name: github.com known_hosts 등록
+  ansible.builtin.known_hosts:
+    path: "/home/{{ dev_user }}/.ssh/known_hosts"
+    name: github.com
+    key: "{{ item }}"
+    state: present
+  loop: "{{ dev_github_host_keys }}"
+
+- name: known_hosts 소유권 정리
+  ansible.builtin.file:
+    path: "/home/{{ dev_user }}/.ssh/known_hosts"
+    owner: "{{ dev_user }}"
+    group: "{{ dev_user }}"
+    mode: '0644'
+
+# GitHub SSH 인증 검증 (공개키가 GitHub 에 등록된 후 성공한다)
+# 등록 전에는 Permission denied → 플레이를 중단시키지 않고 안내만 출력
+# become_user 로 비특권 사용자 전환 시 임시파일 권한 문제(ACL)가 있어 root 에서 runuser 사용
+- name: GitHub SSH 인증 확인
+  ansible.builtin.command: >-
+    runuser -l {{ dev_user }} -c
+    'ssh -o BatchMode=yes -o ConnectTimeout=10 -T git@github.com'
+  register: dev_github_auth
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: GitHub 인증 결과 출력
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'GitHub SSH 인증 OK — ' ~ (dev_github_auth.stderr_lines | first | default(''))
+         if 'successfully authenticated' in (dev_github_auth.stderr | default(''))
+         else 'GitHub 인증 대기 — 공개키(files/' ~ dev_git_key_src ~ '.pub)를 GitHub 계정에 등록하세요 (1회)' }}

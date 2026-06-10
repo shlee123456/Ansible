@@ -1,0 +1,8 @@
+---
+# git-credentials 역할 기본값
+
+# GitHub 계정 (비공개 레포 접근용 — 토큰과 계정이 일치해야 함)
+git_username: shlee123456
+
+# GitHub 토큰 (vault 암호화 변수 참조)
+git_token: "{{ vault_git_token | default('') }}"

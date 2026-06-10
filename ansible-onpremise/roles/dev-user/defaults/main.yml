@@ -1,0 +1,23 @@
+---
+# dev-user 역할 기본값
+# 개인 작업 계정 생성 + 공유 git 배포 키 설치 (서버 초기 세팅 후 바로 SSH clone 가능)
+
+# 생성할 개인 계정 (puzzle 은 사내 공용 계정 → 개인 작업은 이 계정으로)
+dev_user: shlee
+dev_user_shell: /bin/bash
+
+# 초기 비밀번호 해시 (vault, SHA512). 초기값은 puzzle 과 동일 — 서버에서 passwd 로 변경 가능
+dev_user_password_hash: "{{ vault_shlee_password_hash }}"
+
+# 부여할 그룹 (docker 그룹은 존재할 때만 추가 — 아래 tasks 에서 처리)
+dev_user_groups:
+  - sudo
+
+# 공유 git 배포 키 (files/git_deploy_ed25519 는 ansible-vault 로 파일 암호화돼 있음)
+# 모든 서버에 동일 키 배포 → GitHub 에는 공개키를 1회만 등록하면 됨
+dev_git_key_src: git_deploy_ed25519
+
+# github.com SSH 호스트 키 (공식 공개 호스트 키 — 최초 clone 시 프롬프트 방지)
+dev_github_host_keys:
+  - "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+  - "github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg="
