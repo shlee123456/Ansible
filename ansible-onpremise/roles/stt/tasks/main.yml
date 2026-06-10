@@ -1,0 +1,8 @@
+---
+# stt 역할: 음성인식 서버 + 서비스 (docker compose 기반) — 골격
+# 서버 입고 + 서비스 소스(git) 확정 후 구체화 예정.
+# TODO: 서비스 소스 클론, deploy 스크립트 연동, compose 기동
+
+- name: stt 역할 자리표시
+  ansible.builtin.debug:
+    msg: "stt 역할은 서버 입고·서비스 소스 확정 후 구체화 예정 (현재 골격만)"
