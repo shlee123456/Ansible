@@ -93,7 +93,21 @@ echo -e "모드: ${YELLOW}${MODE:-'실제 적용'}${NC}"
 [[ -n "$TAGS" ]] && echo -e "태그: ${YELLOW}${TAGS#--tags }${NC}"
 echo ""
 
-# 플레이북 실행
-# -k: SSH 비밀번호 입력
-# -K: sudo 비밀번호 입력
-ansible-playbook -i inventory/hosts playbook.yml -k -K $VERBOSE $MODE $LIMIT $TAGS
+# 플레이북 실행 (인증 우선순위)
+# 1) .vault_pass 존재     → Vault 가 비밀번호 복호화, 프롬프트 없음 (기본 경로)
+# 2) SSHPASS 환경변수     → -e 변수 주입으로 비대화식 (vault 변수보다 우선)
+# 3) 둘 다 없음           → Vault 비밀번호 프롬프트 (--ask-vault-pass)
+#    (vault.yml 이 암호화돼 있어 -k -K 만으로는 변수 로딩이 불가)
+if [[ -n "$SSHPASS" ]]; then
+    echo -e "${GREEN}SSHPASS 감지 → 비대화식 실행${NC}"
+    ansible-playbook -i inventory/hosts playbook.yml \
+        -e 'ansible_password={{ lookup("env","SSHPASS") }}' \
+        -e 'ansible_become_pass={{ lookup("env","SSHPASS") }}' \
+        $VERBOSE $MODE $LIMIT $TAGS
+elif [[ -f .vault_pass ]]; then
+    echo -e "${GREEN}.vault_pass 감지 → Vault 비대화식 실행${NC}"
+    ansible-playbook -i inventory/hosts playbook.yml $VERBOSE $MODE $LIMIT $TAGS
+else
+    echo -e "${YELLOW}.vault_pass 없음 → Vault 비밀번호 프롬프트${NC}"
+    ansible-playbook -i inventory/hosts playbook.yml --ask-vault-pass $VERBOSE $MODE $LIMIT $TAGS
+fi

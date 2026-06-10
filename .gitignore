@@ -13,3 +13,8 @@
 *.log
 __pycache__/
 *.pyc
+
+# 비밀 파일 (커밋 금지)
+.vault_pass
+**/.vault_pass
+**/.claude/settings.local.json

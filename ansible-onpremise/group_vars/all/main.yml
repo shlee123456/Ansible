@@ -16,3 +16,8 @@ timezone: Asia/Seoul
 
 # Docker 설정 (docker role에서 사용)
 docker_user: "{{ ansible_user }}"
+
+# 접속/승격 비밀번호: vault.yml(암호화)의 변수를 참조
+# 복호화에는 .vault_pass 필요 (ansible.cfg 의 vault_password_file, gitignore 대상)
+ansible_password: "{{ vault_ansible_password }}"
+ansible_become_pass: "{{ vault_ansible_password }}"
