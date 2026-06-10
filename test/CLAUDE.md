@@ -6,7 +6,16 @@
 ## 목적
 
 실제 온프레미스/AWS 서버 없이, 일회용 Ubuntu/Debian 컨테이너에서 실제 역할
-(common, docker, ssh-keys)을 실행하고 **멱등성(changed=0)** 을 검증한다.
+(common, docker, ssh-keys, nvidia, llm)을 실행하고 **멱등성(changed=0)** 을 검증한다.
+
+### 역할 커버리지 (onprem)
+
+| 역할 | 검증 범위 |
+|------|----------|
+| bootstrap, common, docker, ssh-keys | 전체 (데몬 검증은 `--no-docker-daemon` 시 제외) |
+| nvidia | GPU 미감지 자동 스킵 경로 (사전 패키지 + lspci 감지) — 실제 드라이버 설치는 실서버 전용 |
+| llm | venv·디렉토리·디스크 가드 (`llm_models: []`) — 모델 다운로드는 실서버 전용 |
+| git-credentials, dev-user | **미커버** — 실제 vault 비밀(GitHub 토큰·배포 키)과 외부 서비스 필요 → 실서버 검증 전용 |
 
 ## 디렉토리 구조
 
@@ -44,6 +53,12 @@ test/
   가 가능하다. 환경이 불안정하면 `./run-tests.sh --no-docker-daemon` 으로 데몬 검증만 건너뛴다.
 - **아키텍처**: 호스트가 Apple Silicon 이면 컨테이너가 arm64 로 뜨므로, docker 역할의
   apt repo `arch` 가 동적이어야 한다(역할 수정본 전제). Intel Mac(amd64)에서는 영향 없음.
+- **이미지 노후 → 멱등성 거짓 실패**: 이미지가 오래되면 converge 도중 apt 가 systemd 등을
+  부수 업그레이드하고, 그 postinst 가 시스템 상태를 바꿔(예: systemd 255.4-8.16 의
+  /etc/default/locale 심링크 전환, provision.conf 의 /root/.ssh 재소유) 2회차에 changed 가
+  난다. 역할 버그처럼 보이면 먼저 이미지를 재빌드할 것:
+  `docker rmi ansible-harness:ubuntu2204 ansible-harness:ubuntu2404 ansible-harness:debian12`
+  (빌드 캐시가 남아 있으면 `docker builder prune` 도 필요할 수 있음)
 
 ## 실행 (요약)
 
