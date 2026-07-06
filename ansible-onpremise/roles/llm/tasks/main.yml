@@ -18,9 +18,10 @@
   args:
     creates: "{{ llm_hf_venv }}/bin/pip"
 
-- name: huggingface_hub[hf_transfer] 설치 (venv)
+# hf_transfer 는 deprecated → Xet 고속 전송(hf_xet) 사용 (아래 다운로드 태스크 환경변수와 짝)
+- name: huggingface_hub[hf_xet] 설치 (venv)
   ansible.builtin.pip:
-    name: "huggingface_hub[hf_transfer]"
+    name: "huggingface_hub[hf_xet]"
     state: present
     virtualenv: "{{ llm_hf_venv }}"
 
@@ -85,7 +86,8 @@
     creates: "{{ item.dest | default(llm_models_dir ~ '/' ~ (item.repo_id | basename)) }}/{{ llm_download_marker }}"
   environment:
     HF_TOKEN: "{{ llm_hf_token }}"
-    HF_HUB_ENABLE_HF_TRANSFER: "1"
+    # Xet 고속 전송 (구 HF_HUB_ENABLE_HF_TRANSFER 는 deprecated)
+    HF_XET_HIGH_PERFORMANCE: "1"
   become: false
   loop: "{{ llm_models }}"
   loop_control:
