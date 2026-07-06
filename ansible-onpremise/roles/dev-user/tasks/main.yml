@@ -66,6 +66,17 @@
     mode: '0755'
 
 # github.com 호스트 키 사전 등록 → 최초 clone 시 yes/no 프롬프트 없음
+# 이미 등록돼 있는지 먼저 확인 (등록/소유권정리를 조건부로 → 멱등성 확보).
+# known_hosts 모듈은 root 로 파일을 재작성하며 소유권을 root 로 되돌리는데(내용 무변화 시 ok 보고),
+# 무조건 소유권 정리를 하면 매 실행 changed 가 된다. 등록이 필요할 때만 두 태스크를 수행한다.
+- name: known_hosts 에 github.com 등록 여부 확인
+  ansible.builtin.command: >-
+    ssh-keygen -F github.com -f /home/{{ dev_user }}/.ssh/known_hosts
+  register: dev_github_known
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
 - name: github.com known_hosts 등록
   ansible.builtin.known_hosts:
     path: "/home/{{ dev_user }}/.ssh/known_hosts"
@@ -73,6 +84,7 @@
     key: "{{ item }}"
     state: present
   loop: "{{ dev_github_host_keys }}"
+  when: dev_github_known.rc != 0
 
 - name: known_hosts 소유권 정리
   ansible.builtin.file:
@@ -80,6 +92,7 @@
     owner: "{{ dev_user }}"
     group: "{{ dev_user }}"
     mode: '0644'
+  when: dev_github_known.rc != 0
 
 # GitHub SSH 인증 검증 (공개키가 GitHub 에 등록된 후 성공한다)
 # 등록 전에는 Permission denied → 플레이를 중단시키지 않고 안내만 출력
