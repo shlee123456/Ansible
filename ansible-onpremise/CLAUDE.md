@@ -14,14 +14,19 @@ Ubuntu 기반 온프레미스 서버의 인프라 자동화 구성
 | work-node1 | 192.168.45.54 | 사무실 mini-pc |
 | test-node1 | 192.168.45.231 | 테스트 서버 |
 | work-node2 | 192.168.45.114 | LLM 서빙 서버 (Ubuntu 24.04, RTX PRO 6000 Blackwell x2) |
+| hwasun-stt-node1 | 192.168.45.171 | 화순 전남대 — 음성인식(stt) 예정 노드 (현재 기본 세팅만) |
+| hwasun-llm-node1 | 192.168.45.172 | 화순 전남대 — LLM 서빙 서버 (GPU 감지, /media/llm-models 3.2TB LVM) |
 
 ### 서버 그룹
 
 | 그룹 | 호스트 | 용도 |
 |------|--------|------|
 | servers | 전체 | 공통 기반 (bootstrap, common, docker, nvidia) |
-| llm | work-node2 | LLM 모델 다운로드·서빙 (단일 3.5TB LVM, /media/llm-models 표준 경로) |
+| llm | work-node2, hwasun-llm-node1 | LLM 모델 다운로드·서빙 (/media/llm-models 표준 경로) |
 | stt | (입고 예정) | 음성인식 서버·서비스 (docker compose) |
+
+> **hwasun-stt-node1**: 음성인식 용도로 입고됐으나 stt 서비스 소스 확정 전까지 `[stt]` 그룹에
+> 넣지 않고 기본 세팅만 적용한다. stt 역할 구체화 시 `[stt]` 그룹에 추가.
 
 ## 인증 방식
 

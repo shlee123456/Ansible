@@ -6,12 +6,18 @@ work-node1 ansible_host=192.168.45.54
 test-node1 ansible_host=192.168.45.231
 # 신규 서버
 work-node2 ansible_host=192.168.45.114
+# 화순 전남대 — 음성인식(stt) 예정 노드 (현재는 기본 세팅만: stt 그룹 미포함)
+hwasun-stt-node1 ansible_host=192.168.45.171
+# 화순 전남대 — LLM 서빙 노드
+hwasun-llm-node1 ansible_host=192.168.45.172
 
 # LLM 서빙 서버 그룹 (모델 다운로드·서빙)
 [llm]
 work-node2
+hwasun-llm-node1
 
 # 음성인식 서버 그룹 (서버 입고 예정 — 입고 시 호스트 추가)
+# hwasun-stt-node1 은 stt 서비스 소스 확정 전까지 기본 세팅만 → 여기에 추가하지 않음
 [stt]
 
 [servers:vars]
