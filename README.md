@@ -33,6 +33,9 @@ Ansible 기반 IaC(Infrastructure as Code) 프로젝트로, 온프레미스 및 
 ```bash
 cd ansible-onpremise
 
+# 최초 1회: Vault 복호화 키 생성 (비밀번호는 안전한 채널로 전달받기)
+echo '<vault 비밀번호>' > .vault_pass && chmod 600 .vault_pass
+
 # 방법 1: 스크립트 실행
 ./start.sh
 
@@ -49,6 +52,7 @@ ansible-playbook -i inventory/hosts playbook.yml -v
 
 > 접속 비밀번호는 `group_vars/all/vault.yml`에 Vault 암호화되어 있으며,
 > `.vault_pass` 파일로 자동 복호화됩니다 (둘 다 gitignore 대상).
+> 개발환경 최초 설정은 [ansible-onpremise/SETUP.md](ansible-onpremise/SETUP.md) 참조.
 
 ### AWS 환경
 
@@ -67,10 +71,11 @@ ansible-playbook -i inventory/hosts playbook.yml
 ```
 ansible/
 ├── roles/bootstrap/      # 공유 부트스트랩 역할 (python3 설치 + facts 수집)
+├── scripts/              # 유틸리티 (setup-env, ping, facts, list-hosts)
 ├── ansible-onpremise/    # 온프레미스 환경
 │   ├── playbook.yml      # 메인 플레이북 (servers + llm/stt 그룹별 플레이)
 │   ├── inventory/hosts   # 호스트 목록 (servers / llm / stt 그룹)
-│   ├── group_vars/       # 공통 변수 (all/main.yml) + Vault 비밀값 (all/vault.yml)
+│   ├── group_vars/       # all/main.yml(공통) · all/vault.yml(Vault) · llm.yml
 │   └── roles/            # common, docker, nvidia, llm, stt,
 │                         # git-credentials, dev-user, ssh-keys
 ├── ansible-aws/          # AWS 환경
@@ -160,7 +165,3 @@ locale
 - [Ansible 공식 문서](https://docs.ansible.com/)
 - [Docker 설치 가이드](https://docs.docker.com/engine/install/)
 - [ansible-onpremise/SETUP.md](ansible-onpremise/SETUP.md) - 로컬 개발환경 상세 설정
-
-## 라이선스
-
-MIT License
